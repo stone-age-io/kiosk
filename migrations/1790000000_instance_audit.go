@@ -3,8 +3,8 @@ package migrations
 import (
 	"fmt"
 
-	"github.com/pocketbase/pocketbase/core"
-	m "github.com/pocketbase/pocketbase/migrations"
+	"ganigeorgiev.com/pocketbase/pocketbase/core"
+	m "ganigeorgiev.com/pocketbase/pocketbase/migrations"
 )
 
 // instance_audit is the append-only audit log for item_instances lifecycle

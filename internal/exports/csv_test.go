@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pocketbase/pocketbase"
-	"github.com/pocketbase/pocketbase/core"
+	"ganigeorgiev.com/pocketbase/pocketbase"
+	"ganigeorgiev.com/pocketbase/pocketbase/core"
 
 	_ "github.com/skeeeon/kiosk/migrations"
 )
@@ -25,10 +25,10 @@ func TestCSVSafe(t *testing.T) {
 		{"@SUM(A1)", "'@SUM(A1)"},
 		{"\tcmd", "'\tcmd"},
 		{"\rcmd", "'\rcmd"},
-		{"-1", "-1"},          // negative number — must NOT be mangled
-		{"-12.5", "-12.5"},    // negative decimal — unchanged
+		{"-1", "-1"},                // negative number — must NOT be mangled
+		{"-12.5", "-12.5"},          // negative decimal — unchanged
 		{"-1+cmd(1)", "'-1+cmd(1)"}, // leading '-' but not a number — guarded
-		{"EMP-1", "EMP-1"},    // dash mid-string is fine
+		{"EMP-1", "EMP-1"},          // dash mid-string is fine
 	}
 	for _, c := range cases {
 		if got := csvSafe(c.in); got != c.want {

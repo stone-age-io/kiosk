@@ -3,8 +3,8 @@ package migrations
 import (
 	"fmt"
 
-	"github.com/pocketbase/pocketbase/core"
-	m "github.com/pocketbase/pocketbase/migrations"
+	"ganigeorgiev.com/pocketbase/pocketbase/core"
+	m "ganigeorgiev.com/pocketbase/pocketbase/migrations"
 )
 
 // Adds a denormalized `lines_count` to transactions so the admin UI and the

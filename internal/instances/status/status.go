@@ -18,7 +18,7 @@ package status
 import (
 	"fmt"
 
-	"github.com/pocketbase/pocketbase/core"
+	"ganigeorgiev.com/pocketbase/pocketbase/core"
 )
 
 // Instance lifecycle status enum (item_instances.status) + the audit action

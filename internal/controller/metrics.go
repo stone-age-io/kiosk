@@ -3,8 +3,8 @@ package controller
 import (
 	"strings"
 
+	"ganigeorgiev.com/pocketbase/pocketbase/core"
 	"github.com/nats-io/nats.go"
-	"github.com/pocketbase/pocketbase/core"
 
 	"github.com/skeeeon/kiosk/internal/events"
 )

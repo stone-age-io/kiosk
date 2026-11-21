@@ -6,9 +6,9 @@ import (
 	"log/slog"
 	"sync"
 
+	"ganigeorgiev.com/pocketbase/dbx"
+	"ganigeorgiev.com/pocketbase/pocketbase/core"
 	"github.com/nats-io/nats.go/jetstream"
-	"github.com/pocketbase/dbx"
-	"github.com/pocketbase/pocketbase/core"
 
 	"github.com/skeeeon/kiosk/internal/catalog"
 )

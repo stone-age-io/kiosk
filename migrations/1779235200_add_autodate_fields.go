@@ -3,8 +3,8 @@ package migrations
 import (
 	"fmt"
 
-	"github.com/pocketbase/pocketbase/core"
-	m "github.com/pocketbase/pocketbase/migrations"
+	"ganigeorgiev.com/pocketbase/pocketbase/core"
+	m "ganigeorgiev.com/pocketbase/pocketbase/migrations"
 )
 
 // PB 0.22+ no longer adds `created`/`updated` to base collections automatically;

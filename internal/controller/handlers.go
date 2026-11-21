@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pocketbase/pocketbase/core"
+	"ganigeorgiev.com/pocketbase/pocketbase/core"
 
 	"github.com/skeeeon/kiosk/internal/config"
 	"github.com/skeeeon/kiosk/internal/exports"

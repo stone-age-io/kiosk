@@ -6,8 +6,8 @@ import (
 	"log/slog"
 	"sort"
 
+	"ganigeorgiev.com/pocketbase/pocketbase/core"
 	"github.com/nats-io/nats.go/jetstream"
-	"github.com/pocketbase/pocketbase/core"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/skeeeon/kiosk/internal/catalog"

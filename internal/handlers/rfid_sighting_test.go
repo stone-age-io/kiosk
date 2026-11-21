@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/pocketbase/pocketbase/core"
+	"ganigeorgiev.com/pocketbase/pocketbase/core"
 
 	"github.com/skeeeon/kiosk/internal/rfid"
 )

@@ -3,7 +3,7 @@ package controller
 import (
 	"testing"
 
-	"github.com/pocketbase/pocketbase/core"
+	"ganigeorgiev.com/pocketbase/pocketbase/core"
 )
 
 // seedKiosk inserts a kiosks row directly via the DAO. Tests can't use the

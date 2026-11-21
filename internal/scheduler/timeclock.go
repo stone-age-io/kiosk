@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/pocketbase/pocketbase/core"
+	"ganigeorgiev.com/pocketbase/pocketbase/core"
 
 	"github.com/skeeeon/kiosk/internal/exports"
 	"github.com/skeeeon/kiosk/internal/notifications"

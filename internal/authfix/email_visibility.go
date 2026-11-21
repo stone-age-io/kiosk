@@ -5,7 +5,7 @@
 package authfix
 
 import (
-	"github.com/pocketbase/pocketbase/core"
+	"ganigeorgiev.com/pocketbase/pocketbase/core"
 )
 
 // EnforceEmailVisibility installs an OnRecordCreate hook on the users and

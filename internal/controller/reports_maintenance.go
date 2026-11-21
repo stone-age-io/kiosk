@@ -5,8 +5,8 @@ import (
 	"sort"
 	"time"
 
+	"ganigeorgiev.com/pocketbase/pocketbase/core"
 	"github.com/nats-io/nats.go"
-	"github.com/pocketbase/pocketbase/core"
 
 	"github.com/skeeeon/kiosk/internal/events"
 	"github.com/skeeeon/kiosk/internal/notifications"

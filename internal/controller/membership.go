@@ -3,8 +3,8 @@ package controller
 import (
 	"fmt"
 
-	"github.com/pocketbase/dbx"
-	"github.com/pocketbase/pocketbase/core"
+	"ganigeorgiev.com/pocketbase/dbx"
+	"ganigeorgiev.com/pocketbase/pocketbase/core"
 )
 
 // KiosksForItem returns the kiosk records that stock the given item — one

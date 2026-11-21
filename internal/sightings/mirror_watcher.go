@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"log/slog"
 
+	"ganigeorgiev.com/pocketbase/pocketbase/core"
 	"github.com/nats-io/nats.go/jetstream"
-	"github.com/pocketbase/pocketbase/core"
 )
 
 // MirrorWatcher hydrates a managed node's own slice of the controller's

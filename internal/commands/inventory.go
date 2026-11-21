@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/pocketbase/dbx"
-	"github.com/pocketbase/pocketbase/core"
+	"ganigeorgiev.com/pocketbase/dbx"
+	"ganigeorgiev.com/pocketbase/pocketbase/core"
 
 	"github.com/skeeeon/kiosk/internal/dberr"
 	"github.com/skeeeon/kiosk/internal/events"

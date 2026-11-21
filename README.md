@@ -199,8 +199,8 @@ live on `item_instances` (`rfid_epc` / `ble_id`), never on the SKU.
 
 | Layer | Choice |
 |---|---|
-| Server | Go 1.25 (single binary) |
-| Database | PocketBase 0.38 + SQLite (file at `pb_data/data.db`) |
+| Server | Go 1.27 (single binary) |
+| Database | PocketBase 0.41 + SQLite (file at `pb_data/data.db`) |
 | Migrations | Schema-as-code in Go (`migrations/*.go`), run on startup |
 | Config | YAML + `KIOSK_*` env-var overrides |
 | Frontend | Vue 3 (Composition API, `<script setup>`) + TypeScript |

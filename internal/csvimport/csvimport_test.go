@@ -5,9 +5,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pocketbase/dbx"
-	"github.com/pocketbase/pocketbase"
-	"github.com/pocketbase/pocketbase/core"
+	"ganigeorgiev.com/pocketbase/dbx"
+	"ganigeorgiev.com/pocketbase/pocketbase"
+	"ganigeorgiev.com/pocketbase/pocketbase/core"
 
 	// Side-effect: register kiosk-side migrations including the groups
 	// collection that the users importer auto-resolves against.
@@ -66,8 +66,8 @@ func TestRun_Items_DryRunClassifiesInsertVsUpdate(t *testing.T) {
 
 	csvBody := strings.Join([]string{
 		"code,name,type,tracking_mode,active",
-		"HAMMER,Hammer (Renamed),tool,quantity,true",  // would update
-		"WRENCH,Wrench,tool,quantity,true",            // would insert
+		"HAMMER,Hammer (Renamed),tool,quantity,true", // would update
+		"WRENCH,Wrench,tool,quantity,true",           // would insert
 	}, "\n")
 
 	result, err := Run(app, KindItems, strings.NewReader(csvBody), true)
@@ -143,8 +143,8 @@ func TestRun_Items_DuplicateCodeInSameCSVTreatedAsUpdate(t *testing.T) {
 
 	csvBody := strings.Join([]string{
 		"code,name,type,tracking_mode,active",
-		"HAMMER,Hammer,tool,quantity,true",          // insert
-		"HAMMER,Hammer (v2),tool,quantity,true",     // update of the line above
+		"HAMMER,Hammer,tool,quantity,true",      // insert
+		"HAMMER,Hammer (v2),tool,quantity,true", // update of the line above
 	}, "\n")
 	result, err := Run(app, KindItems, strings.NewReader(csvBody), false)
 	if err != nil {
@@ -247,9 +247,9 @@ func TestRun_Items_PerRowErrorsDontAbortRun(t *testing.T) {
 	app := setupApp(t)
 	csvBody := strings.Join([]string{
 		"code,name,type,tracking_mode",
-		",MissingCode,tool,quantity",        // row 2: MISSING_CODE
-		"BAD,Bad Type,widget,quantity",       // row 3: INVALID_TYPE
-		"GOOD,Good,tool,quantity",            // row 4: ok
+		",MissingCode,tool,quantity",   // row 2: MISSING_CODE
+		"BAD,Bad Type,widget,quantity", // row 3: INVALID_TYPE
+		"GOOD,Good,tool,quantity",      // row 4: ok
 	}, "\n")
 
 	result, err := Run(app, KindItems, strings.NewReader(csvBody), false)

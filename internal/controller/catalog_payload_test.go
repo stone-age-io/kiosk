@@ -3,7 +3,7 @@ package controller
 import (
 	"testing"
 
-	"github.com/pocketbase/pocketbase/core"
+	"ganigeorgiev.com/pocketbase/pocketbase/core"
 )
 
 // TestItemPayloadFrom_CarriesEveryPolicyField guards the third hop.

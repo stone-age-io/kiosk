@@ -3,8 +3,8 @@ package controllermigrations
 import (
 	"testing"
 
-	"github.com/pocketbase/pocketbase"
-	"github.com/pocketbase/pocketbase/core"
+	"ganigeorgiev.com/pocketbase/pocketbase"
+	"ganigeorgiev.com/pocketbase/pocketbase/core"
 
 	// Side-effect import: the kiosk migrations register via init() and
 	// the controller migrations build on top of them, so both sets must

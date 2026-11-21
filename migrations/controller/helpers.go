@@ -9,7 +9,7 @@
 // kiosk's blank import would have run the controller migrations too.
 package controllermigrations
 
-import "github.com/pocketbase/pocketbase/core"
+import "ganigeorgiev.com/pocketbase/pocketbase/core"
 
 // adminRule duplicates the same string defined in
 // migrations/1779000000_init.go. Copied unexported rather than exported

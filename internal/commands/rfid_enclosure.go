@@ -18,7 +18,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/pocketbase/dbx"
+	"ganigeorgiev.com/pocketbase/dbx"
 
 	"github.com/skeeeon/kiosk/internal/cart"
 )

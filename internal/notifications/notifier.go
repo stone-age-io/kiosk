@@ -12,9 +12,9 @@ import (
 	"text/template"
 	"time"
 
-	"github.com/pocketbase/dbx"
-	"github.com/pocketbase/pocketbase/core"
-	pbmailer "github.com/pocketbase/pocketbase/tools/mailer"
+	"ganigeorgiev.com/pocketbase/dbx"
+	"ganigeorgiev.com/pocketbase/pocketbase/core"
+	pbmailer "ganigeorgiev.com/pocketbase/pocketbase/tools/mailer"
 )
 
 // CollectionName is the PocketBase collection that stores editable

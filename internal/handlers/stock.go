@@ -3,8 +3,8 @@ package handlers
 import (
 	"fmt"
 
-	"github.com/pocketbase/dbx"
-	"github.com/pocketbase/pocketbase/core"
+	"ganigeorgiev.com/pocketbase/dbx"
+	"ganigeorgiev.com/pocketbase/pocketbase/core"
 )
 
 // availableForItem reports how many units of an item are available to take

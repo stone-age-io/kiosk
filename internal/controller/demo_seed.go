@@ -17,9 +17,9 @@ import (
 	"fmt"
 	"log"
 
+	"ganigeorgiev.com/pocketbase/pocketbase"
+	"ganigeorgiev.com/pocketbase/pocketbase/core"
 	"github.com/nats-io/nats.go"
-	"github.com/pocketbase/pocketbase"
-	"github.com/pocketbase/pocketbase/core"
 	"github.com/spf13/cobra"
 
 	"github.com/skeeeon/kiosk/internal/config"

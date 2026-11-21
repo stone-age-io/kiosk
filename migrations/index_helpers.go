@@ -1,6 +1,6 @@
 package migrations
 
-import "github.com/pocketbase/pocketbase/core"
+import "ganigeorgiev.com/pocketbase/pocketbase/core"
 
 // Index introspection helpers used by several kiosk-side migrations
 // (1779900000, 1780000000, 1787000000, 1789000000). Lives here rather

@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- **Go 1.25+** (required by PocketBase 0.38)
+- **Go 1.27+** (required by PocketBase 0.41, imported from `ganigeorgiev.com/pocketbase`, never the archived `github.com/pocketbase`)
 - **Node 20+** with npm (any recent LTS works; tested on 25)
 - **A USB HID barcode scanner** for production. Any keyboard-emulating model:
   Honeywell, Zebra, generic Chinese OEM. For development, your keyboard is fine.

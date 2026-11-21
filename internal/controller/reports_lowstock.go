@@ -9,8 +9,8 @@ import (
 	"sync"
 	"time"
 
+	"ganigeorgiev.com/pocketbase/pocketbase/core"
 	"github.com/nats-io/nats.go"
-	"github.com/pocketbase/pocketbase/core"
 
 	"github.com/skeeeon/kiosk/internal/events"
 	"github.com/skeeeon/kiosk/internal/exports"
@@ -184,7 +184,6 @@ func (h *Handlers) gatherLowStock(nc *nats.Conn, reg *HeartbeatRegistry, kioskCo
 	sort.SliceStable(errs, func(i, j int) bool { return errs[i].KioskCode < errs[j].KioskCode })
 	return rows, errs, nil
 }
-
 
 // fanoutInventorySnapshots fires `inventory.snapshot` at each kiosk in
 // parallel and gathers the replies.

@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pocketbase/dbx"
+	"ganigeorgiev.com/pocketbase/dbx"
 )
 
 // TestHandleInventoryAdjust_ProjectsRow drives the projection path directly

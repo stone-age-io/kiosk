@@ -6,9 +6,9 @@ import (
 	"net/http"
 	"time"
 
+	"ganigeorgiev.com/pocketbase/pocketbase/core"
 	"github.com/google/uuid"
 	"github.com/nats-io/nats.go"
-	"github.com/pocketbase/pocketbase/core"
 
 	"github.com/skeeeon/kiosk/internal/events"
 	"github.com/skeeeon/kiosk/internal/exports"

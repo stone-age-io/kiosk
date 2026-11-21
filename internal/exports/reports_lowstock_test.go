@@ -4,7 +4,7 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/pocketbase/pocketbase/core"
+	"ganigeorgiev.com/pocketbase/pocketbase/core"
 )
 
 func seedItemLowStock(t *testing.T, app core.App, code, typ string, onHand, threshold int) {
@@ -30,9 +30,9 @@ func seedItemLowStock(t *testing.T, app core.App, code, typ string, onHand, thre
 func TestComputeLowStockRows(t *testing.T) {
 	app := setupApp(t)
 
-	seedItemLowStock(t, app, "LOW", "tool", 2, 5)         // 2 ≤ 5 → low
-	seedItemLowStock(t, app, "OK", "tool", 10, 3)         // 10 > 3 → not low
-	seedItemLowStock(t, app, "NOTHRESH", "tool", 1, 0)    // threshold 0 → skipped
+	seedItemLowStock(t, app, "LOW", "tool", 2, 5)          // 2 ≤ 5 → low
+	seedItemLowStock(t, app, "OK", "tool", 10, 3)          // 10 > 3 → not low
+	seedItemLowStock(t, app, "NOTHRESH", "tool", 1, 0)     // threshold 0 → skipped
 	seedItemLowStock(t, app, "GLOVES", "consumable", 1, 5) // 1 ≤ 5 → low
 
 	rows, err := ComputeLowStockRows(app, "KIOSK-A")
