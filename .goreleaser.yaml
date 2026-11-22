@@ -83,6 +83,7 @@ archives:
       - README.md
       - CHANGELOG.md
       - controller.yaml.example
+      - contract/README.md
       - contract/**/*
       - docs/*.md
     name_template: >-
