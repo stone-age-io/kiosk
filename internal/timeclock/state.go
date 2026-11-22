@@ -40,11 +40,10 @@ const (
 	DirectionOut = "out"
 )
 
-// PunchStateBucket is the JetStream KV bucket the controller projects
-// per-user clocked-in state into, broadcast-keyed by user_code (users are
-// org-wide — same keying as catalog_users). Kiosks in managed mode watch it
-// into a Fleet.
-const PunchStateBucket = "punch_state"
+// The controller projects per-user clocked-in state into the punch family of
+// kvx.StateBucket, broadcast-keyed by user_code (users are org-wide — same
+// keying as the catalog's users family). Kiosks in managed mode watch it into
+// a Fleet.
 
 // PunchStatePayload is the KV value shape — single source of truth for both
 // the controller's writer and the kiosk's watcher (catalog/payload.go
@@ -56,7 +55,7 @@ type PunchStatePayload struct {
 	SourcePunchID string    `json:"source_punch_id"`
 }
 
-// Fleet is the kiosk-local in-memory replica of the punch_state bucket.
+// Fleet is the kiosk-local in-memory replica of the punch family of the state bucket.
 // Hydrated by the watcher (WatchAll replays the full bucket on start, so a
 // process restart recovers fleet state without local persistence). Reads are
 // nil-safe so standalone kiosks pass a nil *Fleet everywhere and degrade to
@@ -109,13 +108,11 @@ func (f *Fleet) Delete(userCode string) {
 	delete(f.m, userCode)
 }
 
-// OpenCheckoutsStateBucket is the JetStream KV bucket the controller projects
-// each user's fleet-wide open-checkout summary into, broadcast-keyed by
-// user_code (same keying as punch_state — users are org-wide). Managed kiosks
-// and the virtual timeclock terminal watch it into a CheckoutFleet so a
-// clock-out at ANY surface can see tools the worker has out at OTHER kiosks.
-// Sibling of PunchStateBucket.
-const OpenCheckoutsStateBucket = "open_checkouts_state"
+// The controller projects each user's fleet-wide open-checkout summary into
+// the open family of kvx.StateBucket, broadcast-keyed by user_code (same
+// keying as punch — users are org-wide). Managed kiosks and the virtual
+// timeclock terminal watch it into a CheckoutFleet so a clock-out at ANY
+// surface can see tools the worker has out at OTHER kiosks.
 
 // OpenCheckoutRow is one outstanding unit in the fleet replica — flat and
 // display-oriented (item identity + the building to return it to). Single
@@ -137,7 +134,7 @@ type OpenCheckoutsStatePayload struct {
 }
 
 // CheckoutFleet is the kiosk-local in-memory replica of the
-// open_checkouts_state bucket. Mirror of Fleet, but with plain latest-wins
+// open family of the state bucket. Mirror of Fleet, but with plain latest-wins
 // semantics (no occurred_at monotonic compare): every controller recompute
 // reflects the full current ledger, so even a redelivered or out-of-order
 // trigger writes current truth, and the next event self-heals. Reads are
@@ -240,7 +237,7 @@ func CurrentState(app core.App, fleet *Fleet, userID, userCode string) (State, e
 		s.OccurredAt = p.GetDateTime("occurred_at").Time()
 		s.Origin = "local"
 	}
-	// A punch made HERE round-trips kiosk → controller → punch_state KV and
+	// A punch made HERE round-trips kiosk → controller → the punch family and
 	// lands back in the replica. If the fleet entry is the local latest punch
 	// itself, it's not "another kiosk" — and a precision mismatch (the DB
 	// stores ms; older deployments published the event timestamp at ns) must

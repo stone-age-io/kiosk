@@ -68,10 +68,7 @@ func RegisterSeedCommand(app *pocketbase.PocketBase, cfg *config.Config) {
 				if err != nil {
 					return fmt.Errorf("jetstream: %w", err)
 				}
-				if _, err := NewCatalogPublisher(context.Background(), app, js,
-					cfg.Controller.CatalogItemsBucket,
-					cfg.Controller.CatalogUsersBucket,
-					cfg.Controller.CatalogGroupsBucket); err != nil {
+				if _, err := NewCatalogPublisher(context.Background(), app, js, cfg.Controller.CatalogBucket); err != nil {
 					return fmt.Errorf("catalog publisher: %w", err)
 				}
 			}

@@ -174,7 +174,7 @@ func PerformPunch(app core.App, fleet *Fleet, checkoutFleet *CheckoutFleet, rule
 		return nil, fmt.Errorf("occurred_at %s is in the future", occurredAt.Format(time.RFC3339))
 	}
 	// PB DateTime stores ms; this value also rides the punch event to the
-	// controller and back via the punch_state replica. One precision
+	// controller and back via the punch replica. One precision
 	// everywhere keeps the local row and its fleet echo comparable.
 	occurredAt = occurredAt.Truncate(time.Millisecond)
 

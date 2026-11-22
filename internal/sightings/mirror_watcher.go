@@ -8,12 +8,14 @@ import (
 
 	"ganigeorgiev.com/pocketbase/pocketbase/core"
 	"github.com/nats-io/nats.go/jetstream"
+
+	"github.com/stone-age-io/kiosk/internal/kvx"
 )
 
 // MirrorWatcher hydrates a managed node's own slice of the controller's
-// last_observed_state KV bucket into its local item_instances.last_observed_*
+// seen family of the state KV bucket into its local item_instances.last_observed_*
 // columns (location/sightings L3). It watches "<kiosk_code>.>" — the
-// catalog_items slicing pattern, NOT WatchAll — so the node only ever receives
+// items slicing pattern, NOT WatchAll — so the node only ever receives
 // keys for its OWN units, never another site's. This is what lets a unit owned
 // here but seen by another site's gateway show its true last-seen locally.
 //
@@ -30,10 +32,10 @@ type MirrorWatcher struct {
 }
 
 // NewMirrorWatcher wires a watcher; call Start to begin. Empty bucket defaults
-// to LastObservedStateBucket.
+// to kvx.StateBucket.
 func NewMirrorWatcher(app core.App, js jetstream.JetStream, kioskCode, bucket string) *MirrorWatcher {
 	if bucket == "" {
-		bucket = LastObservedStateBucket
+		bucket = kvx.StateBucket
 	}
 	return &MirrorWatcher{app: app, js: js, bucket: bucket, kioskCode: kioskCode}
 }
@@ -43,7 +45,7 @@ func NewMirrorWatcher(app core.App, js jetstream.JetStream, kioskCode, bucket st
 // missing, NATS down).
 func (w *MirrorWatcher) Start(parent context.Context) error {
 	if w.kioskCode == "" {
-		return fmt.Errorf("kiosk code is empty; refusing to watch the whole last_observed_state bucket")
+		return fmt.Errorf("kiosk code is empty; refusing to watch every kiosk's sightings")
 	}
 	ctx, cancel := context.WithCancel(parent)
 	w.cancel = cancel
@@ -53,8 +55,8 @@ func (w *MirrorWatcher) Start(parent context.Context) error {
 		cancel()
 		return fmt.Errorf("open %s KV: %w", w.bucket, err)
 	}
-	// Own slice only — server-side prefix filter (the catalog_items pattern).
-	kw, err := kv.Watch(ctx, w.kioskCode+".>")
+	// Own slice only — server-side prefix filter (the items pattern).
+	kw, err := kvx.Family(kv, kvx.Seen).Watch(ctx, w.kioskCode+".>")
 	if err != nil {
 		cancel()
 		return fmt.Errorf("watch %s: %w", w.bucket, err)

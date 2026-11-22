@@ -36,7 +36,7 @@ func newTestWatcher(app core.App) *Watcher {
 	// watcher's Start path is what would touch JetStream, and that's
 	// integration-tested out of process. kioskCode is arbitrary; it only
 	// matters when Start runs the prefix-filtered Watch.
-	return NewWatcher(app, nil, ItemsBucket, UsersBucket, GroupsBucket, "KTEST")
+	return NewWatcher(app, nil, "", "KTEST")
 }
 
 func TestWatcher_UpsertItem_InsertsAndUpdates(t *testing.T) {

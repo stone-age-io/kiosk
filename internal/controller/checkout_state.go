@@ -9,15 +9,15 @@ import (
 	"github.com/stone-age-io/kiosk/internal/timeclock"
 )
 
-// Open-checkouts state broadcast. Sibling of the punch_state writer
+// Open-checkouts state broadcast. Sibling of the punch-family writer
 // (timeclock_consumer.go): after the controller projects a line that changes a
 // user's open set, recompute that user's fleet-wide outstanding rows and
-// publish them to the open_checkouts_state bucket. Managed kiosks + the virtual
+// publish them to the open family of the state bucket. Managed kiosks + the virtual
 // terminal watch it for the cross-kiosk clock-out gate. Advisory — failures log
 // and never block the ack; the replica self-heals on the next line.
 
 // refreshOpenCheckoutsState recomputes one user's fleet-wide open checkouts and
-// writes them to the open_checkouts_state bucket (key = user_code). It ALWAYS
+// writes them to the open family of the state bucket (key = user_code). It ALWAYS
 // writes, including the empty case, so a return clears the gate rather than
 // leaving a stale row behind. userCode "" or an absent KV bucket is a no-op.
 func (a *Aggregator) refreshOpenCheckoutsState(ctx context.Context, userCode string) {

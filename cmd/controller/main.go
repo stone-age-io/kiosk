@@ -169,9 +169,7 @@ func main() {
 		aggCtx, aggCancel := context.WithCancel(context.Background())
 
 		cp, err := controller.NewCatalogPublisher(aggCtx, app, js,
-			cfg.Controller.CatalogItemsBucket,
-			cfg.Controller.CatalogUsersBucket,
-			cfg.Controller.CatalogGroupsBucket)
+			cfg.Controller.CatalogBucket)
 		if err != nil {
 			aggCancel()
 			return fmt.Errorf("catalog publisher: %w", err)
@@ -201,7 +199,7 @@ func main() {
 		}
 
 		// Sighting ingest: plain core-NATS fleet-wide subscriber for the lossy
-		// `sighting` family (location/sightings L3). Provisions last_observed_state,
+		// `sighting` family (location/sightings L3). Provisions the state bucket's seen family,
 		// resolves via instance_epc_index, upserts instance_location, mirrors down.
 		sightingIngest := controller.NewSightingIngest(aggCtx, app, js)
 		sightingSub, err := sightingIngest.Subscribe(nc)

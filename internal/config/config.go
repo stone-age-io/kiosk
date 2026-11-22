@@ -239,10 +239,10 @@ func within(dir, path string) bool {
 // Disabled by default — a kiosk with controller.enabled=false continues to
 // behave as a standalone v1 kiosk regardless of whether NATS is on.
 type ControllerConfig struct {
-	Enabled             bool   `yaml:"enabled"`
-	CatalogItemsBucket  string `yaml:"catalog_items_bucket"`
-	CatalogUsersBucket  string `yaml:"catalog_users_bucket"`
-	CatalogGroupsBucket string `yaml:"catalog_groups_bucket"`
+	Enabled bool `yaml:"enabled"`
+	// CatalogBucket is the KV bucket holding the catalog's items, users and
+	// groups families (kvx). Empty is kvx.CatalogBucket, KIOSK_CATALOG.
+	CatalogBucket string `yaml:"catalog_bucket"`
 }
 
 // RFIDConfig opts a kiosk into RFID-driven inventory flows. See
@@ -383,7 +383,7 @@ type RFIDAntennaConfig struct {
 //   - BlockClockOutWithOpenCheckouts makes the punch funnel reject a
 //     clock-out while the worker has open checkouts. The funnel merges THIS
 //     kiosk's local open_checkouts with the fleet-wide replica (the
-//     controller-written open_checkouts_state bucket, partitioned by
+//     controller-written open family of the state bucket, partitioned by
 //     kiosk_code), so in managed mode the gate sees tools out at OTHER kiosks
 //     too. Without a controller (standalone) or with KV unavailable it
 //     degrades to local-only — fail-open for the cross-kiosk portion. Admin
@@ -406,8 +406,8 @@ type RFIDAntennaConfig struct {
 //     checkout endpoints exist. The flag is presentation+wiring intent surfaced
 //     to the SPA as timeclock_virtual; it requires Enabled and managed mode
 //     (controller + NATS) because punches reach the fleet only via the
-//     controller's punch_state broadcast and workers are sourced from the
-//     catalog_users watcher.
+//     controller's punch broadcast and workers are sourced from the
+//     users-family watcher.
 type TimeclockConfig struct {
 	Enabled                        bool `yaml:"enabled"`
 	RequireClockInForCheckout      bool `yaml:"require_clock_in_for_checkout"`
@@ -631,14 +631,8 @@ func applyEnvOverrides(c *Config) {
 	if v := os.Getenv("KIOSK_CONTROLLER_ENABLED"); v != "" {
 		c.Controller.Enabled = parseBool(v)
 	}
-	if v := os.Getenv("KIOSK_CONTROLLER_CATALOG_ITEMS_BUCKET"); v != "" {
-		c.Controller.CatalogItemsBucket = v
-	}
-	if v := os.Getenv("KIOSK_CONTROLLER_CATALOG_USERS_BUCKET"); v != "" {
-		c.Controller.CatalogUsersBucket = v
-	}
-	if v := os.Getenv("KIOSK_CONTROLLER_CATALOG_GROUPS_BUCKET"); v != "" {
-		c.Controller.CatalogGroupsBucket = v
+	if v := os.Getenv("KIOSK_CONTROLLER_CATALOG_BUCKET"); v != "" {
+		c.Controller.CatalogBucket = v
 	}
 	if v := os.Getenv("KIOSK_RFID_ENABLED"); v != "" {
 		c.RFID.Enabled = parseBool(v)
@@ -738,7 +732,7 @@ func validate(c *Config) error {
 	// NATS/controller wiring degrades gracefully exactly like cmd/kiosk. In the
 	// unmanaged modes workers are provisioned locally (admin SPA / superuser /
 	// CSV) and clocked-in state is local-only; managed mode adds catalog-synced
-	// workers and the fleet-wide punch_state replica.
+	// workers and the fleet-wide punch replica.
 	if c.Timeclock.Virtual && !c.Timeclock.Enabled {
 		return fmt.Errorf("timeclock.virtual requires timeclock.enabled=true")
 	}

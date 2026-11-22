@@ -7,11 +7,13 @@ import (
 	"log/slog"
 
 	"github.com/nats-io/nats.go/jetstream"
+
+	"github.com/stone-age-io/kiosk/internal/kvx"
 )
 
 // CheckoutWatcher hydrates a CheckoutFleet from the controller-written
-// open_checkouts_state bucket. Near-verbatim sibling of Watcher (which feeds
-// the punch_state Fleet) — the only differences are the bucket, the payload
+// open family of the state bucket. Near-verbatim sibling of Watcher (which feeds
+// the punch Fleet) — the only differences are the bucket, the payload
 // type, and latest-wins Upsert. WatchAll replays the full bucket on start, so
 // a process restart recovers fleet state without local persistence.
 type CheckoutWatcher struct {
@@ -35,20 +37,20 @@ func (w *CheckoutWatcher) Start(parent context.Context) error {
 	ctx, cancel := context.WithCancel(parent)
 	w.cancel = cancel
 
-	kv, err := w.js.KeyValue(ctx, OpenCheckoutsStateBucket)
+	kv, err := w.js.KeyValue(ctx, kvx.StateBucket)
 	if err != nil {
 		cancel()
-		return fmt.Errorf("open open_checkouts_state KV %q: %w", OpenCheckoutsStateBucket, err)
+		return fmt.Errorf("open state KV %q: %w", kvx.StateBucket, err)
 	}
-	kw, err := kv.WatchAll(ctx)
+	kw, err := kvx.Family(kv, kvx.Open).WatchAll(ctx)
 	if err != nil {
 		cancel()
-		return fmt.Errorf("watch open_checkouts_state: %w", err)
+		return fmt.Errorf("watch %s.%s: %w", kvx.StateBucket, kvx.Open, err)
 	}
 	w.kw = kw
 
 	go w.run(ctx, kw)
-	slog.Info("kiosk.timeclock.checkout_watcher.started", "bucket", OpenCheckoutsStateBucket)
+	slog.Info("kiosk.timeclock.checkout_watcher.started", "bucket", kvx.StateBucket, "family", kvx.Open)
 	return nil
 }
 

@@ -9,6 +9,45 @@ History before this file is in `git log`.
 
 ## [Unreleased]
 
+### Breaking
+
+**Six KV buckets became two, with key families inside**, as accessd keeps
+`ACC_POLICY`. Nothing is in production, so there is no compatibility window.
+
+| Before | After |
+|---|---|
+| `catalog_items`, key `{kiosk}.{item}` | `KIOSK_CATALOG`, key `items.{kiosk}.{item}` |
+| `catalog_users`, key `{user}` | `KIOSK_CATALOG`, key `users.{user}` |
+| `catalog_groups`, key `{group}` | `KIOSK_CATALOG`, key `groups.{group}` |
+| `punch_state`, key `{user}` | `KIOSK_STATE`, key `punch.{user}` |
+| `open_checkouts_state`, key `{user}` | `KIOSK_STATE`, key `open.{user}` |
+| `last_observed_state`, key `{kiosk}.{instance}` | `KIOSK_STATE`, key `seen.{kiosk}.{instance}` |
+
+- **Why.** Each bucket is a block of NATS grants. The `kiosk-controller`
+  role made a 4,745-byte user JWT, over nats-server's default
+  `max_control_line` of 4,096, so the server refused the controller's
+  connect. It is now 1,886 bytes.
+- **The roles are trimmed** to what each binary does with a KV bucket: the
+  controller 76 entries to 28, a node 45 to 21, a timeclock 36 to 18. A
+  bucket the controller only writes and reads no longer gets a durable
+  consumer's grants. A timeclock can now also read the advisory `seen`
+  family, since a reader's grants cover a whole bucket. Apply the contract
+  again: `stone apply --template contract/`. A running process gets the new
+  grants on its next connect.
+- **`controller.catalog_bucket`** (`KIOSK_CONTROLLER_CATALOG_BUCKET`,
+  default `KIOSK_CATALOG`) replaces `catalog_items_bucket`,
+  `catalog_users_bucket` and `catalog_groups_bucket`. The old keys are
+  ignored.
+- **The catalog integrity report's `bucket` field** names the family, such as
+  `KIOSK_CATALOG.items`.
+- **Upgrading.** Run a catalog reconcile once
+  (`POST /api/kiosk/catalog/reconcile`, which pushes every key into
+  `KIOSK_CATALOG`). The state families fill as the controller projects new
+  events; its durable consumer does not replay old ones, so a worker's
+  clocked-in and open-checkout state reappears at their next punch or
+  checkout. Both are advisory and fail open meanwhile. Remove the old buckets
+  with `nats kv rm`.
+
 ### Added
 
 - **The platform keeps the NATS creds file current** (ADR 0009 in

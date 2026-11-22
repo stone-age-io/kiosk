@@ -170,10 +170,7 @@ func openBroker(ctx context.Context, app core.App, cfg *config.Config) (*nats.Co
 		closeFn()
 		return nil, nil, fmt.Errorf("ensure stream: %w", err)
 	}
-	if _, err := NewCatalogPublisher(ctx, app, js,
-		cfg.Controller.CatalogItemsBucket,
-		cfg.Controller.CatalogUsersBucket,
-		cfg.Controller.CatalogGroupsBucket); err != nil {
+	if _, err := NewCatalogPublisher(ctx, app, js, cfg.Controller.CatalogBucket); err != nil {
 		closeFn()
 		return nil, nil, fmt.Errorf("catalog publisher: %w", err)
 	}

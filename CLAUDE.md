@@ -277,7 +277,7 @@ Three invariants:
      (`internal/sightings.ApplySighting` + the node subscriber), the controller
      via `instance_epc_index` (`internal/controller.SightingIngest`, plain
      subscribe). Last-observed is mirrored back to the owning node via the
-     `last_observed_state` KV bucket, sliced per node like `catalog_items`
+     `seen` family of `KIOSK_STATE`, sliced per node like `items`
      (NOT WatchAll). Publish via the raw conn (`PublishBytes` /
      `sightings.PublishCustodyReads`), never `events.Publish`.
    - **Commands** — `<prefix>.<kiosk_code>.cmd.<name>` (built via
@@ -633,7 +633,7 @@ clocked-in state. Dependency direction: commit/handlers/commands/controller
 deliberately **no materialized open-shifts table**: "is this user clocked
 in" = latest punch by `occurred_at` (`created` breaks ties), merged with
 the fleet replica — `timeclock.CurrentState` is THE single merge-rule
-function ("fresher of local ledger vs `punch_state` KV replica wins").
+function ("fresher of local ledger vs `punch` replica in `KIOSK_STATE` wins").
 Funnel rules: live (self/foreman) punches enforce in/out alternation and
 target-active, are always stamped `now()`, and can never force; foremen
 punch only crew in their own group (role+group re-read inside the txn —
@@ -651,7 +651,7 @@ turns into a one-tap "clock in now?" — keep that carve-out when touching
 commit error handling). `block_clock_out_with_open_checkouts` rejects
 clock-outs while the worker has open checkouts. The funnel merges THIS
 kiosk's local `open_checkouts` with the fleet-wide replica (the
-controller-written `open_checkouts_state` KV bucket, hydrated into a
+controller-written `open` family of the `KIOSK_STATE` bucket, hydrated into a
 `timeclock.CheckoutFleet` via `timeclock.CheckoutWatcher` — sibling of the
 punch-state replica), partitioned by `kiosk_code` so the two views are
 disjoint and never double-count. So a clock-out at any surface sees tools out
@@ -672,7 +672,7 @@ block on — but in managed mode it still blocks on the fleet replica (tools out
 at other kiosks); standalone, it's a no-op (no replica).
 **Cross-kiosk punches work in managed mode**: the controller projects
 each punch into its own `time_punches` and broadcasts per-user state into
-the `punch_state` KV bucket (key = `user_code`, like `catalog_users`;
+the `punch` family of `KIOSK_STATE` (key = `user_code`, like `users`;
 monotonic on `occurred_at` via `shouldReplacePunchState`); kiosks hydrate
 an in-memory `timeclock.Fleet` via `timeclock.Watcher` (WatchAll replays
 the bucket on start, so restarts recover; the replica is advisory — KV
@@ -725,7 +725,7 @@ SAME three modes as `cmd/kiosk` (standalone / standalone+NATS /
 controller-managed) with identical best-effort wiring — in unmanaged modes
 workers are provisioned locally and `PunchFleet`/`CheckoutFleet` are nil
 (local-only state); managed mode adds the catalog-synced workers + the
-`punch_state` and `open_checkouts_state` replicas. The fleet-wide clock-out
+`punch` and `open` replicas. The fleet-wide clock-out
 gate (above) is what makes a phone clock-out — which has no local
 `open_checkouts` at all — able to see and block on a worker's tools out across
 the fleet.
@@ -737,7 +737,7 @@ anywhere; admins assign via the `KioskItemsPanel` on the kiosk detail
 page's Items tab (plus a "bulk add by category" action). Categories are
 **not** a stored rule — bulk-add creates rows at that moment; new items
 added later won't auto-fill. The kiosk-side watcher uses
-`Watch(<kiosk_code>.>)` on the shared `catalog_items` bucket, so per-kiosk
+`Watch(<kiosk_code>.>)` on the `items` family of `KIOSK_CATALOG`, so per-kiosk
 filtering is enforced server-side and the kiosk never receives keys for
 other kiosks. Three paths get a kiosk a row in `kiosks`: **(1)
 pre-registered** by an admin via the "New kiosk" button on
@@ -763,7 +763,7 @@ the same row.
   `instance.lifecycle` → `instance_lifecycle_audit`,
   `timeclock.punch` → `time_punches` (idempotent on `source_punch_id`;
   after a successful project the aggregator also writes the user's state
-  to the `punch_state` KV bucket — monotonic, advisory, never blocks the
+  to the `punch` family of `KIOSK_STATE` — monotonic, advisory, never blocks the
   ack; no `touchKiosk` from this branch), and
   `checkout.admin_close` → `transactions` + `transaction_lines` (via
   `ProjectAdminCloseToLedger`, which mirrors the ledger rows
@@ -784,10 +784,10 @@ the same row.
   over the union of the user's own transactions plus any transaction whose
   return/close names them as `original_checkout_user`, so a foreman's
   cross-user return still closes the holder's row) — and writes it to the
-  `open_checkouts_state` KV bucket keyed by `user_code`
+  `open` family of `KIOSK_STATE`, keyed by `user_code`
   (`refreshOpenCheckoutsState`, always writing incl. the empty case so a
   return clears the gate). That bucket is the cross-kiosk clock-out gate's
-  replica; advisory + best-effort, same posture as `punch_state`. `integrity.rebuild` reaches the controller
+  replica; advisory + best-effort, same posture as `punch`. `integrity.rebuild` reaches the controller
   ack-and-log only — there is nothing materialized to rebuild. The two
   managed-mode notification subjects `receipt.transaction` and
   `alert.lowstock` ride the same durable consumer but are dispatched in
@@ -941,6 +941,15 @@ when `controller.enabled=true`, the kiosk's startup wires up
 SPA hides catalog mutation buttons (gated on the `managed` flag in the
 identity payload). NATS must also be enabled and point at the same broker
 the controller publishes to.
+
+**Two KV buckets, key families inside.** The controller writes `KIOSK_CATALOG`
+(`items.<kiosk>.<item>`, `users.<user>`, `groups.<group>`) and `KIOSK_STATE`
+(`punch.<user>`, `open.<user>`, `seen.<kiosk>.<instance>`). Code touches a family
+only through `kvx.Family`, whose `Store` adds and strips the prefix and lists keys
+filtered on the server, so a sync that deletes keys missing from the database
+cannot reach another family. Do not add a bucket per concept: each bucket is a
+block of NATS grants, and six of them made the controller's JWT exceed
+nats-server's 4 KB `max_control_line`. Add a family instead.
 
 The `platform:` block (ADR 0009) makes each binary keep `nats.credentials_file`
 current as its own Thing: `events.StartKeeper` runs the kit's `credskeeper`

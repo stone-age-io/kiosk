@@ -83,7 +83,7 @@ type GroupPayload struct {
 	Active       bool   `json:"active"`
 }
 
-// MarshalItem encodes an item for storage in the catalog_items KV bucket.
+// MarshalItem encodes an item for the catalog's items family.
 func MarshalItem(p ItemPayload) ([]byte, error) {
 	if p.Code == "" {
 		return nil, fmt.Errorf("item payload missing code")
@@ -103,7 +103,7 @@ func UnmarshalItem(data []byte) (ItemPayload, error) {
 	return p, nil
 }
 
-// MarshalUser encodes a user for storage in the catalog_users KV bucket.
+// MarshalUser encodes a user for the catalog's users family.
 func MarshalUser(p UserPayload) ([]byte, error) {
 	if p.Code == "" {
 		return nil, fmt.Errorf("user payload missing code")
@@ -123,7 +123,7 @@ func UnmarshalUser(data []byte) (UserPayload, error) {
 	return p, nil
 }
 
-// MarshalGroup encodes a group for storage in the catalog_groups KV bucket.
+// MarshalGroup encodes a group for the catalog's groups family.
 func MarshalGroup(p GroupPayload) ([]byte, error) {
 	if p.Code == "" {
 		return nil, fmt.Errorf("group payload missing code")
@@ -142,10 +142,3 @@ func UnmarshalGroup(data []byte) (GroupPayload, error) {
 	}
 	return p, nil
 }
-
-// Bucket names. Centralized so both sides agree without a config dance.
-const (
-	ItemsBucket  = "catalog_items"
-	UsersBucket  = "catalog_users"
-	GroupsBucket = "catalog_groups"
-)

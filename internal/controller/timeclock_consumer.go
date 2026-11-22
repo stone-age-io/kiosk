@@ -12,7 +12,7 @@ import (
 	"github.com/stone-age-io/kiosk/internal/timeclock"
 )
 
-// Timeclock punch projection + punch_state KV broadcast. Sibling of the
+// Timeclock punch projection + punch-family KV broadcast. Sibling of the
 // inventory_audit / instance_lifecycle_audit projections: idempotent on a
 // unique-when-non-empty source id, ack on terminal cases, retry on DB
 // hiccups. The KV write rides AFTER a successful projection and is
@@ -126,7 +126,7 @@ func (a *Aggregator) findTimePunchBySourceID(sourcePunchID string) (*core.Record
 	return rec, nil
 }
 
-// shouldReplacePunchState is the monotonic guard for the punch_state bucket:
+// shouldReplacePunchState is the monotonic guard for the punch family of the state bucket:
 // only a strictly newer occurred_at overwrites, so redelivery and republish
 // of old punches can never drag a user's broadcast state backwards. Pure
 // function — tested without JetStream.
@@ -135,7 +135,7 @@ func shouldReplacePunchState(existing, incoming timeclock.PunchStatePayload) boo
 }
 
 // writePunchState broadcasts the user's latest punch state to the
-// punch_state bucket (key = user_code). Read-compare-write rather than CAS:
+// punch family of the state bucket (key = user_code). Read-compare-write rather than CAS:
 // the single durable consumer is the only writer, so the monotonic compare
 // can't race itself. Failures log and the event still acks — the replica is
 // advisory by design.

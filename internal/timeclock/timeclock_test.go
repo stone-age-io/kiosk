@@ -519,7 +519,7 @@ func TestCurrentState_FleetMergeRule(t *testing.T) {
 	}
 }
 
-// A punch made at THIS kiosk echoes back through controller → punch_state →
+// A punch made at THIS kiosk echoes back through controller → punch family →
 // fleet replica. Even if the echo's timestamp reads fractionally fresher than
 // the local row (pre-truncation deployments published ns while the DB stored
 // ms), the same punch must never be reported as "fleet" — the SPA renders

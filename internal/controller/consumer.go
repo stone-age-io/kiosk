@@ -16,8 +16,8 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 
 	"github.com/stone-age-io/kiosk/internal/events"
+	"github.com/stone-age-io/kiosk/internal/kvx"
 	"github.com/stone-age-io/kiosk/internal/notifications"
-	"github.com/stone-age-io/kiosk/internal/timeclock"
 )
 
 // consumerName is the durable consumer name. Durability means restarts
@@ -140,19 +140,19 @@ type Aggregator struct {
 	// SetNotifier from cmd/controller/main after the app is bootstrapped.
 	notifier *notifications.Notifier
 
-	// punchKV is the punch_state bucket the aggregator broadcasts per-user
+	// punchKV is the punch family of the state bucket the aggregator broadcasts per-user
 	// clocked-in state into after projecting a timeclock.punch. Provisioned
 	// in Start; nil until then (writePunchState nil-checks). The replica is
 	// advisory — KV failures log and the event still acks; the kiosk merge
 	// rule + the next punch self-heal.
-	punchKV jetstream.KeyValue
+	punchKV kvx.Store
 
-	// checkoutKV is the open_checkouts_state bucket the aggregator recomputes
+	// checkoutKV is the open family of the state bucket the aggregator recomputes
 	// per-user after projecting a checkout/return/admin_close line. Feeds the
 	// cross-kiosk clock-out gate at managed kiosks + the virtual terminal.
 	// Provisioned in Start; nil until then (refreshOpenCheckoutsState
 	// nil-checks). Advisory, same posture as punchKV.
-	checkoutKV jetstream.KeyValue
+	checkoutKV kvx.Store
 
 	cancelCtx context.CancelFunc
 	consumeCC jetstream.ConsumeContext
@@ -195,28 +195,15 @@ func (a *Aggregator) Start(parent context.Context) error {
 		return fmt.Errorf("ensure consumer: %w", err)
 	}
 
-	// punch_state bucket — best-effort: a KV provisioning failure degrades
-	// managed kiosks to local-only punch state, it doesn't stop the ledger
-	// projection.
-	if kv, kvErr := a.js.CreateOrUpdateKeyValue(ctx, jetstream.KeyValueConfig{
-		Bucket:      timeclock.PunchStateBucket,
-		Description: "Per-user clocked-in state, broadcast-keyed by user_code. Written by the controller aggregator, watched by managed kiosks.",
-		History:     1,
-	}); kvErr != nil {
-		slog.Warn("controller.aggregator.punch_state_bucket_failed", "error", kvErr)
+	// The state bucket's punch (per-user clocked-in state) and open
+	// (per-user fleet-wide open checkouts) families — best-effort: a KV
+	// provisioning failure degrades managed kiosks to local-only state, it
+	// doesn't stop the ledger projection.
+	if kv, kvErr := kvx.EnsureState(ctx, a.js); kvErr != nil {
+		slog.Warn("controller.aggregator.state_bucket_failed", "error", kvErr)
 	} else {
-		a.punchKV = kv
-	}
-
-	// open_checkouts_state bucket — same best-effort posture as punch_state.
-	if kv, kvErr := a.js.CreateOrUpdateKeyValue(ctx, jetstream.KeyValueConfig{
-		Bucket:      timeclock.OpenCheckoutsStateBucket,
-		Description: "Per-user fleet-wide open-checkout summary, broadcast-keyed by user_code. Written by the controller aggregator, watched by managed kiosks for the cross-kiosk clock-out gate.",
-		History:     1,
-	}); kvErr != nil {
-		slog.Warn("controller.aggregator.open_checkouts_state_bucket_failed", "error", kvErr)
-	} else {
-		a.checkoutKV = kv
+		a.punchKV = kvx.Family(kv, kvx.Punch)
+		a.checkoutKV = kvx.Family(kv, kvx.Open)
 	}
 
 	cc, err := cons.Consume(func(msg jetstream.Msg) {
@@ -326,7 +313,7 @@ func (a *Aggregator) ensureConsumer(ctx context.Context, stream jetstream.Stream
 			events.LowStockAlertFilter(),
 			events.MaintenanceAlertFilter(),
 			// Timeclock punches project into the controller's own
-			// time_punches and drive the punch_state KV broadcast.
+			// time_punches and drive the punch-family KV broadcast.
 			events.TimeclockPunchFilter(),
 		},
 	}

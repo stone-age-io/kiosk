@@ -419,7 +419,7 @@ func TestReplayOpenRowsForUser_ForemanCrossUserReturnClosesHolder(t *testing.T) 
 	}
 }
 
-// The open_checkouts_state replica payload (what feeds the cross-kiosk
+// The open-checkouts replica payload (what feeds the cross-kiosk
 // clock-out gate) reflects the projected ledger: a row with item + building
 // after a checkout, and an empty slice after the return clears it.
 func TestBuildOpenCheckoutsPayload_ReflectsLedger(t *testing.T) {

@@ -5,7 +5,7 @@
 #
 # This binary is a kiosk in every architectural sense — it has a kiosk_code,
 # writes the time_punches ledger through the same funnel, and (in managed mode)
-# rides the punch_state KV replica to the fleet — but its trust boundary is the
+# rides the KIOSK_STATE punch replica to the fleet — but its trust boundary is the
 # AUTHENTICATED worker session, not the box. Workers clock in/out from their
 # phones after signing in (OAuth2 SSO or password). The binary registers ONLY
 # the authed /api/self/timeclock/* surface (plus admin user-import); none of
@@ -70,13 +70,11 @@ nats:
   tls_insecure: false
 
 # Managed mode (mode 3) — the catalog watcher provisions workers locally from
-# the controller and the punch_state replica gives fleet-wide clocked-in state.
+# the controller and the punch replica gives fleet-wide clocked-in state.
 # Set enabled=false for standalone modes (provision workers locally instead).
 controller:
   enabled: true
-  catalog_items_bucket: "catalog_items"
-  catalog_users_bucket: "catalog_users"
-  catalog_groups_bucket: "catalog_groups"
+  catalog_bucket: "KIOSK_CATALOG"
 
 branding:
   logo_path: "./branding/logo.svg"

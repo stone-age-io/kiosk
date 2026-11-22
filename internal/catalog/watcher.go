@@ -11,28 +11,29 @@ import (
 	"ganigeorgiev.com/pocketbase/pocketbase/core"
 	"github.com/nats-io/nats.go/jetstream"
 
+	"github.com/stone-age-io/kiosk/internal/kvx"
+
 	"github.com/stone-age-io/kiosk/internal/dberr"
 )
 
-// Watcher subscribes to the catalog KV buckets and projects each update
+// Watcher watches the items, users and groups families of the catalog bucket
+// (kvx.CatalogBucket) and projects each update
 // into the kiosk's local PB items/users/groups collections. Lifecycle:
 //
-//	w := catalog.NewWatcher(app, js, "catalog_items", "catalog_users", "catalog_groups", "KIOSK01")
+//	w := catalog.NewWatcher(app, js, "", "KIOSK01")   // "" is kvx.CatalogBucket
 //	w.Start(ctx)        // returns once watchers are running
 //	...
 //	w.Stop()            // call from OnTerminate
 //
-// `kioskCode` scopes the items watch to this kiosk's slice of the shared
-// catalog_items bucket — keys are namespaced `<kiosk_code>.<item_code>` so
+// `kioskCode` scopes the items watch to this kiosk's slice of the items
+// family — keys are namespaced `<kiosk_code>.<item_code>` so
 // the watcher uses `Watch("<my_code>.>")` to filter on the wire instead of
 // receiving everything and discarding. Users and groups are not scoped
 // (workers and the groups they belong to are org-wide).
 type Watcher struct {
 	app           core.App
 	js            jetstream.JetStream
-	itemsBucket   string
-	usersBucket   string
-	groupsBucket  string
+	bucket        string
 	kioskCode     string
 	itemsWatcher  jetstream.KeyWatcher
 	usersWatcher  jetstream.KeyWatcher
@@ -41,26 +42,17 @@ type Watcher struct {
 }
 
 // NewWatcher wires a watcher but doesn't connect — call Start to begin
-// watching. Bucket names default to catalog.ItemsBucket / UsersBucket /
-// GroupsBucket if empty, so operators with the standard layout can leave
-// the yaml blank.
-func NewWatcher(app core.App, js jetstream.JetStream, itemsBucket, usersBucket, groupsBucket, kioskCode string) *Watcher {
-	if itemsBucket == "" {
-		itemsBucket = ItemsBucket
-	}
-	if usersBucket == "" {
-		usersBucket = UsersBucket
-	}
-	if groupsBucket == "" {
-		groupsBucket = GroupsBucket
+// watching. An empty bucket is kvx.CatalogBucket, so operators with the
+// standard layout can leave the yaml blank.
+func NewWatcher(app core.App, js jetstream.JetStream, bucket, kioskCode string) *Watcher {
+	if bucket == "" {
+		bucket = kvx.CatalogBucket
 	}
 	return &Watcher{
-		app:          app,
-		js:           js,
-		itemsBucket:  itemsBucket,
-		usersBucket:  usersBucket,
-		groupsBucket: groupsBucket,
-		kioskCode:    kioskCode,
+		app:       app,
+		js:        js,
+		bucket:    bucket,
+		kioskCode: kioskCode,
 	}
 }
 
@@ -72,21 +64,12 @@ func (w *Watcher) Start(parent context.Context) error {
 	ctx, cancel := context.WithCancel(parent)
 	w.cancel = cancel
 
-	items, err := w.js.KeyValue(ctx, w.itemsBucket)
+	kv, err := w.js.KeyValue(ctx, w.bucket)
 	if err != nil {
 		cancel()
-		return fmt.Errorf("open items KV %q: %w", w.itemsBucket, err)
+		return fmt.Errorf("open catalog KV %q: %w", w.bucket, err)
 	}
-	users, err := w.js.KeyValue(ctx, w.usersBucket)
-	if err != nil {
-		cancel()
-		return fmt.Errorf("open users KV %q: %w", w.usersBucket, err)
-	}
-	groups, err := w.js.KeyValue(ctx, w.groupsBucket)
-	if err != nil {
-		cancel()
-		return fmt.Errorf("open groups KV %q: %w", w.groupsBucket, err)
-	}
+	items, users, groups := kvx.Family(kv, kvx.Items), kvx.Family(kv, kvx.Users), kvx.Family(kv, kvx.Groups)
 
 	// Watch on the kiosk's prefix: snapshot of this kiosk's slice, then
 	// ongoing deltas. IncludeHistory is off — we want latest values only.
@@ -127,9 +110,7 @@ func (w *Watcher) Start(parent context.Context) error {
 	go w.runUsers(ctx, uw)
 
 	slog.Info("kiosk.catalog.watcher.started",
-		"items_bucket", w.itemsBucket,
-		"users_bucket", w.usersBucket,
-		"groups_bucket", w.groupsBucket)
+		"bucket", w.bucket)
 	return nil
 }
 

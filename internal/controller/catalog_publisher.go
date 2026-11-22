@@ -2,7 +2,6 @@ package controller
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"sync"
 
@@ -11,13 +10,14 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 
 	"github.com/stone-age-io/kiosk/internal/catalog"
+	"github.com/stone-age-io/kiosk/internal/kvx"
 )
 
 // CatalogPublisher fans controller-side changes out to the JetStream KV bucket
 // that managed kiosks watch.
 //
 // Items are NOT broadcast: each kiosk's "stock" is governed by membership rows
-// in the `kiosk_items` collection. Keys in the shared `catalog_items` bucket
+// in the `kiosk_items` collection. Keys in the catalog's items family
 // are namespaced `<kiosk_code>.<item_code>` so each kiosk can subscribe with
 // `Watch("<my_code>.>")` and only receive its own slice.
 //
@@ -35,9 +35,9 @@ import (
 // CatalogPublisher owns no goroutines — PB invokes hooks synchronously on the
 // request path; the NATS conn buffers in-memory if the broker is unreachable.
 type CatalogPublisher struct {
-	items  jetstream.KeyValue
-	users  jetstream.KeyValue
-	groups jetstream.KeyValue
+	items  kvx.Store
+	users  kvx.Store
+	groups kvx.Store
 	app    core.App
 
 	// pendingMembershipDelete: kiosk_items.id → "<kiosk_code>.<item_code>"
@@ -50,45 +50,20 @@ type CatalogPublisher struct {
 	pendingGroupDelete sync.Map
 }
 
-// NewCatalogPublisher provisions the three KV buckets (idempotent) and binds
-// the PB record hooks on the supplied app.
-func NewCatalogPublisher(ctx context.Context, app core.App, js jetstream.JetStream, itemsBucket, usersBucket, groupsBucket string) (*CatalogPublisher, error) {
-	if itemsBucket == "" {
-		itemsBucket = catalog.ItemsBucket
-	}
-	if usersBucket == "" {
-		usersBucket = catalog.UsersBucket
-	}
-	if groupsBucket == "" {
-		groupsBucket = catalog.GroupsBucket
-	}
-
-	items, err := js.CreateOrUpdateKeyValue(ctx, jetstream.KeyValueConfig{
-		Bucket:      itemsBucket,
-		Description: "Catalog: items, keyed by <kiosk_code>.<item_code>. Membership-driven.",
-		History:     1,
-	})
+// NewCatalogPublisher provisions the catalog bucket (idempotent) and binds
+// the PB record hooks on the supplied app. Items, users and groups are key
+// families of it (kvx). An empty bucket is kvx.CatalogBucket.
+func NewCatalogPublisher(ctx context.Context, app core.App, js jetstream.JetStream, bucket string) (*CatalogPublisher, error) {
+	kv, err := kvx.EnsureCatalog(ctx, js, bucket)
 	if err != nil {
-		return nil, fmt.Errorf("create items KV %q: %w", itemsBucket, err)
+		return nil, err
 	}
-	users, err := js.CreateOrUpdateKeyValue(ctx, jetstream.KeyValueConfig{
-		Bucket:      usersBucket,
-		Description: "Catalog: users, keyed by code. Source of truth for managed kiosks.",
-		History:     1,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("create users KV %q: %w", usersBucket, err)
+	cp := &CatalogPublisher{
+		items:  kvx.Family(kv, kvx.Items),
+		users:  kvx.Family(kv, kvx.Users),
+		groups: kvx.Family(kv, kvx.Groups),
+		app:    app,
 	}
-	groups, err := js.CreateOrUpdateKeyValue(ctx, jetstream.KeyValueConfig{
-		Bucket:      groupsBucket,
-		Description: "Catalog: groups, keyed by code. Source of truth for managed kiosks.",
-		History:     1,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("create groups KV %q: %w", groupsBucket, err)
-	}
-
-	cp := &CatalogPublisher{items: items, users: users, groups: groups, app: app}
 	cp.bindHooks(app)
 	return cp, nil
 }

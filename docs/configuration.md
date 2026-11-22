@@ -57,9 +57,7 @@ KIOSK_NATS_SUBJECT_PREFIX=kiosk
 KIOSK_NATS_STREAM_NAME=KIOSK_EVENTS
 KIOSK_NATS_CREDENTIALS_FILE=/etc/kiosk/nats.creds
 KIOSK_CONTROLLER_ENABLED=true
-KIOSK_CONTROLLER_CATALOG_ITEMS_BUCKET=catalog_items
-KIOSK_CONTROLLER_CATALOG_USERS_BUCKET=catalog_users
-KIOSK_CONTROLLER_CATALOG_GROUPS_BUCKET=catalog_groups
+KIOSK_CONTROLLER_CATALOG_BUCKET=KIOSK_CATALOG
 KIOSK_RFID_ENABLED=true
 KIOSK_RFID_READ_WINDOW=3s
 KIOSK_TIMECLOCK_ENABLED=true
@@ -250,10 +248,8 @@ What to know:
 
 | Key | Type | Default | Meaning |
 | :--- | :--- | :--- | :--- |
-| `controller.enabled` | bool | `false` | Puts the kiosk node under central management. It watches the catalog KV buckets and projects each update into its local tables. |
-| `controller.catalog_items_bucket` | string | `"catalog_items"` | KV bucket for items. Empty uses the default. |
-| `controller.catalog_users_bucket` | string | `"catalog_users"` | KV bucket for workers. Empty uses the default. |
-| `controller.catalog_groups_bucket` | string | `"catalog_groups"` | KV bucket for groups. Empty uses the default. |
+| `controller.enabled` | bool | `false` | Puts the kiosk node under central management. It watches the catalog KV bucket and projects each update into its local tables. |
+| `controller.catalog_bucket` | string | `"KIOSK_CATALOG"` | The catalog KV bucket, holding the items, users and groups families ([Wire Protocol](protocol.md#kv-buckets)). Empty uses the default. The controller and every managed node must agree. |
 
 When `controller.enabled` is `true`, the admin SPA on the kiosk node hides Add,
 Edit and Delete on items and workers. It shows a "Catalog managed by
@@ -402,7 +398,7 @@ Standalone, it does nothing.
 
 **Managed mode** means `controller.enabled: true` with NATS. Punches flow to
 the controller. The controller sends each worker's clocked-in state back to
-every kiosk node through the `punch_state` KV bucket. A worker can clock in at
+every kiosk node through the `punch` family of the `KIOSK_STATE` bucket. A worker can clock in at
 one kiosk node and clock out at another. A standalone kiosk node keeps a
 local-only ledger.
 
@@ -426,7 +422,7 @@ It supports the **same three operating modes** as a kiosk node. The `nats` and
 | :--- | :--- | :--- | :--- | :--- |
 | standalone | `false` | `false` | local (admin SPA, superuser, CSV) | local ledger |
 | standalone + NATS | `true` | `false` | local | local, and punches publish events |
-| controller-managed | `true` | `true` | catalog sync | fleet-wide through `punch_state` |
+| controller-managed | `true` | `true` | catalog sync | fleet-wide through `KIOSK_STATE` |
 
 Use managed mode for a public terminal in front of a fleet. Provisioning stays
 central on the controller. A worker who clocked in at a physical kiosk node

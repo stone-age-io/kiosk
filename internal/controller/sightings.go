@@ -16,6 +16,7 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 
 	"github.com/stone-age-io/kiosk/internal/events"
+	"github.com/stone-age-io/kiosk/internal/kvx"
 	"github.com/stone-age-io/kiosk/internal/sightings"
 )
 
@@ -24,7 +25,7 @@ import (
 // consumer): sightings are lossy and last-write-wins, so durability would only
 // buffer staleness. It resolves each raw sighting to its owning unit via
 // instance_epc_index, upserts the site-wide instance_location view, and mirrors
-// the unit's last-observed back down via the last_observed_state KV bucket so
+// the unit's last-observed back down via the seen family of the state KV bucket so
 // the owning node sees sightings made by other nodes' gateways.
 //
 // The work is gated by a movement-not-reads dedup: a sighting whose
@@ -32,7 +33,7 @@ import (
 // or KV write, so steady-state read volume (a tool sitting still) costs nothing.
 type SightingIngest struct {
 	app        core.App
-	locationKV jetstream.KeyValue // last_observed_state bucket; nil if provisioning failed (mirror skipped)
+	locationKV kvx.Store // seen family of the state bucket; nil if provisioning failed (mirror skipped)
 	logger     *slog.Logger
 
 	mu      sync.Mutex
@@ -41,8 +42,8 @@ type SightingIngest struct {
 	sub *nats.Subscription
 }
 
-// NewSightingIngest constructs the ingest and provisions the last_observed_state
-// KV bucket (best-effort — a failure degrades to no fleet mirror, the
+// NewSightingIngest constructs the ingest and provisions the state KV bucket,
+// whose seen family it writes (best-effort — a failure degrades to no fleet mirror, the
 // instance_location view still updates).
 func NewSightingIngest(ctx context.Context, app core.App, js jetstream.JetStream) *SightingIngest {
 	ing := &SightingIngest{
@@ -51,14 +52,10 @@ func NewSightingIngest(ctx context.Context, app core.App, js jetstream.JetStream
 		lastKey: make(map[string]string),
 	}
 	if js != nil {
-		if kv, err := js.CreateOrUpdateKeyValue(ctx, jetstream.KeyValueConfig{
-			Bucket:      sightings.LastObservedStateBucket,
-			Description: "Per-unit latest sighting, keyed <kiosk_code>.<instance_id>. Written by the controller's SightingIngest, watched own-slice-only by managed nodes.",
-			History:     1,
-		}); err != nil {
+		if kv, err := kvx.EnsureState(ctx, js); err != nil {
 			slog.Warn("controller.sighting.bucket_failed", "error", err)
 		} else {
-			ing.locationKV = kv
+			ing.locationKV = kvx.Family(kv, kvx.Seen)
 		}
 	}
 	return ing
@@ -183,7 +180,7 @@ func (s *SightingIngest) upsertLocation(kioskCode, instanceID, instanceCode stri
 	return nil
 }
 
-// writeMirror broadcasts the unit's last-observed into last_observed_state so
+// writeMirror broadcasts the unit's last-observed into the seen family so
 // the owning node's MirrorWatcher folds it into its local columns. Best-effort,
 // keyed <kiosk_code>.<instance_id>; a failure logs and the instance_location
 // view still stands.

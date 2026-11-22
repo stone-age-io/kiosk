@@ -7,10 +7,10 @@ import (
 	"sort"
 
 	"ganigeorgiev.com/pocketbase/pocketbase/core"
-	"github.com/nats-io/nats.go/jetstream"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/stone-age-io/kiosk/internal/catalog"
+	"github.com/stone-age-io/kiosk/internal/kvx"
 )
 
 // CatalogIntegrityReport diffs the controller's catalog DB state against the
@@ -176,7 +176,7 @@ func expectedGroupKeys(app core.App) (map[string][]byte, error) {
 
 // actualKVKeys enumerates the current keys in a KV bucket via ListKeys.
 // Returns a set keyed by string for O(1) diff lookups.
-func actualKVKeys(ctx context.Context, kv jetstream.KeyValue) (map[string]struct{}, error) {
+func actualKVKeys(ctx context.Context, kv kvx.Store) (map[string]struct{}, error) {
 	lister, err := kv.ListKeys(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list keys: %w", err)
@@ -235,7 +235,7 @@ func (p *CatalogPublisher) Integrity(ctx context.Context) (CatalogIntegrityRepor
 		}
 		missing, extra := diffKeys(expected, actual)
 		report.Items = CatalogIntegrityBucket{
-			Bucket:       p.items.Bucket(),
+			Bucket:       p.items.Name(),
 			ExpectedKeys: len(expected),
 			ActualKeys:   len(actual),
 			MissingInKV:  missing,
@@ -255,7 +255,7 @@ func (p *CatalogPublisher) Integrity(ctx context.Context) (CatalogIntegrityRepor
 		}
 		missing, extra := diffKeys(expected, actual)
 		report.Users = CatalogIntegrityBucket{
-			Bucket:       p.users.Bucket(),
+			Bucket:       p.users.Name(),
 			ExpectedKeys: len(expected),
 			ActualKeys:   len(actual),
 			MissingInKV:  missing,
@@ -275,7 +275,7 @@ func (p *CatalogPublisher) Integrity(ctx context.Context) (CatalogIntegrityRepor
 		}
 		missing, extra := diffKeys(expected, actual)
 		report.Groups = CatalogIntegrityBucket{
-			Bucket:       p.groups.Bucket(),
+			Bucket:       p.groups.Name(),
 			ExpectedKeys: len(expected),
 			ActualKeys:   len(actual),
 			MissingInKV:  missing,
@@ -366,8 +366,8 @@ func (p *CatalogPublisher) Reconcile(ctx context.Context, deleteOrphans bool) (C
 
 // reconcileBucket does the per-bucket push + optional delete. Pulled out
 // so the items and users halves of Reconcile share a single implementation.
-func (p *CatalogPublisher) reconcileBucket(ctx context.Context, kv jetstream.KeyValue, expected map[string][]byte, actual map[string]struct{}, deleteOrphans bool) CatalogReconcileBucket {
-	out := CatalogReconcileBucket{Bucket: kv.Bucket()}
+func (p *CatalogPublisher) reconcileBucket(ctx context.Context, kv kvx.Store, expected map[string][]byte, actual map[string]struct{}, deleteOrphans bool) CatalogReconcileBucket {
+	out := CatalogReconcileBucket{Bucket: kv.Name()}
 
 	// Push: every expected key — not just the missing ones. This is the
 	// "force-resync" semantic operators expect from a reconcile button:

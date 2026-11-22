@@ -2,7 +2,7 @@
 // clock terminal — workers clock in/out from their phones, no badge scanner
 // or dedicated hardware. It is a kiosk in every architectural sense (it has a
 // kiosk_code, writes the time_punches ledger via the same funnel, and — in
-// managed mode — rides punch_state KV to the fleet), but its trust boundary is
+// managed mode — rides the punch family to the fleet), but its trust boundary is
 // the authenticated `users` session rather than the box on a trusted LAN.
 //
 // That inversion is enforced BY CONSTRUCTION: this binary registers ONLY the
@@ -18,8 +18,8 @@
 //   - standalone + NATS: also publishes timeclock.punch events for an external
 //     consumer; still local workers + local state.
 //   - controller-managed: workers (with email, for auth) sync from the
-//     catalog_users watcher and clocked-in state merges
-//     fleet-wide via the punch_state replica.
+//     users-family watcher and clocked-in state merges
+//     fleet-wide via the punch replica.
 //
 // Only timeclock.virtual=true (which implies timeclock.enabled) is required.
 package main
@@ -154,9 +154,7 @@ func main() {
 			log.Printf("controller.enabled=true but jetstream unavailable: %v", jerr)
 		} else {
 			catalogWatcher = catalog.NewWatcher(app, js,
-				cfg.Controller.CatalogItemsBucket,
-				cfg.Controller.CatalogUsersBucket,
-				cfg.Controller.CatalogGroupsBucket,
+				cfg.Controller.CatalogBucket,
 				cfg.Kiosk.Code)
 			punchFleet = timeclock.NewFleet()
 			punchWatcher = timeclock.NewWatcher(js, punchFleet)

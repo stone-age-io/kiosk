@@ -7,9 +7,11 @@ import (
 	"log/slog"
 
 	"github.com/nats-io/nats.go/jetstream"
+
+	"github.com/stone-age-io/kiosk/internal/kvx"
 )
 
-// Watcher hydrates a Fleet from the controller-written punch_state bucket.
+// Watcher hydrates a Fleet from the controller-written punch family of the state bucket.
 // Small sibling of catalog.Watcher — deliberately its own type rather than
 // an extension of the catalog watcher, since punch state projects into an
 // in-memory map, not PB records. WatchAll replays the full bucket on start
@@ -35,20 +37,20 @@ func (w *Watcher) Start(parent context.Context) error {
 	ctx, cancel := context.WithCancel(parent)
 	w.cancel = cancel
 
-	kv, err := w.js.KeyValue(ctx, PunchStateBucket)
+	kv, err := w.js.KeyValue(ctx, kvx.StateBucket)
 	if err != nil {
 		cancel()
-		return fmt.Errorf("open punch_state KV %q: %w", PunchStateBucket, err)
+		return fmt.Errorf("open state KV %q: %w", kvx.StateBucket, err)
 	}
-	kw, err := kv.WatchAll(ctx)
+	kw, err := kvx.Family(kv, kvx.Punch).WatchAll(ctx)
 	if err != nil {
 		cancel()
-		return fmt.Errorf("watch punch_state: %w", err)
+		return fmt.Errorf("watch %s.%s: %w", kvx.StateBucket, kvx.Punch, err)
 	}
 	w.kw = kw
 
 	go w.run(ctx, kw)
-	slog.Info("kiosk.timeclock.watcher.started", "bucket", PunchStateBucket)
+	slog.Info("kiosk.timeclock.watcher.started", "bucket", kvx.StateBucket, "family", kvx.Punch)
 	return nil
 }
 

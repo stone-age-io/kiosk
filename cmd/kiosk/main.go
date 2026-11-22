@@ -119,9 +119,7 @@ func main() {
 			log.Printf("controller.enabled=true but jetstream unavailable: %v", err)
 		} else {
 			catalogWatcher = catalog.NewWatcher(app, js,
-				cfg.Controller.CatalogItemsBucket,
-				cfg.Controller.CatalogUsersBucket,
-				cfg.Controller.CatalogGroupsBucket,
+				cfg.Controller.CatalogBucket,
 				cfg.Kiosk.Code)
 			app.OnServe().BindFunc(func(e *core.ServeEvent) error {
 				if err := catalogWatcher.Start(watcherCtx); err != nil {
@@ -159,7 +157,7 @@ func main() {
 			}
 
 			// Fleet last-observed mirror (location/sightings L3): hydrates this
-			// node's OWN slice of the controller's last_observed_state bucket into
+			// node's OWN slice of the controller's seen family into
 			// its item_instances.last_observed_* columns, so a unit owned here but
 			// seen by another site's gateway shows its true last-seen locally.
 			// Best-effort, same posture as the catalog watcher.
