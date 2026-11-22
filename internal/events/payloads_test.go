@@ -36,7 +36,7 @@ func TestBuildTransactionCompletePayload_KeyShape(t *testing.T) {
 	want := []string{
 		"transaction_id", "kiosk_code", "location_code",
 		"user_id", "user_code", "user_name", "user_group",
-		"started_at", "completed_at",
+		"started_at", "completed_at", "ts",
 		"lines_count", "checked_out", "returned", "consumed",
 	}
 	assertKeysEqual(t, "transaction.complete", got, want)
@@ -82,7 +82,7 @@ func TestBuildItemActionPayload_KeyShape(t *testing.T) {
 		"item_id", "item_code", "item_name",
 		"action", "qty", "serial", "uncorrelated",
 		"original_checkout_user_code", "item_instance_id",
-		"completed_at",
+		"completed_at", "ts",
 	}
 	assertKeysEqual(t, "item.action", got, want)
 

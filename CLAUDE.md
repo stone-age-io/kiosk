@@ -184,44 +184,44 @@ Three invariants:
    `events.Publish`. Every NATS subject follows
    `<prefix>.<kiosk_code>.<family>.<...>` where the family segment is one of
    `event`, `command`, or `heartbeat`. That segment is what determines
-   transport — the JetStream stream binds to `<prefix>.*.event.>` and
+   transport — the JetStream stream binds to `<prefix>.*.evt.>` and
    nothing else, so commands and heartbeats are outside the stream by
    construction rather than by exclusion-list discipline.
 
    Event subjects emitted from the commit/admin paths:
-   `<prefix>.<kiosk_code>.event.transaction.complete` and
-   `<prefix>.<kiosk_code>.event.item.{action}` from the commit hook;
-   `<prefix>.<kiosk_code>.event.inventory.adjust` from the admin
+   `<prefix>.<kiosk_code>.evt.transaction.complete` and
+   `<prefix>.<kiosk_code>.evt.item.{action}` from the commit hook;
+   `<prefix>.<kiosk_code>.evt.inventory.adjust` from the admin
    stock-adjust handler (both local HTTP and remote command paths emit
    the same shape via `handlers.PublishInventoryAdjustEvent`, and
    `commit.AdminClose` emits the same subject for the qty side-effect of
    lost/damaged closes of **quantity-tracked** items only — serialized
    closes retire the instance instead and never emit
-   `inventory.adjust`); `<prefix>.<kiosk_code>.event.integrity.rebuild`
+   `inventory.adjust`); `<prefix>.<kiosk_code>.evt.integrity.rebuild`
    from the open_checkouts rebuild handler;
-   `<prefix>.<kiosk_code>.event.checkout.admin_close` from
+   `<prefix>.<kiosk_code>.evt.checkout.admin_close` from
    `commit.AdminClose` (one per row closed; the matching transaction also
-   rides `event.transaction.complete` and the line rides
-   `event.item.admin_close`-equivalent via the regular `transaction_lines`
-   projection); `<prefix>.<kiosk_code>.event.instance.lifecycle` from the
+   rides `evt.transaction.complete` and the line rides
+   `evt.item.admin_close`-equivalent via the regular `transaction_lines`
+   projection); `<prefix>.<kiosk_code>.evt.instance.lifecycle` from the
    `item_instances` PB record hooks and the shared `SetStatusInTx` writer on
    every `status` transition (`create` / `to_maintenance` /
    `return_to_service` / `retire` / `unretire`; the verb is derived from the
    prev→target pair; cosmetic edits skip) AND from `commit.AdminClose` when a
    serialized `lost`/`damaged` close retires the instance. The
-   `event.instance.lifecycle` payload carries `prev_status`/`new_status` and
+   `evt.instance.lifecycle` payload carries `prev_status`/`new_status` and
    `source_audit_id` (the kiosk-side `instance_audit.id`) so the controller's
    projection is idempotent under redelivery — same anchor strategy as
-   `event.inventory.adjust`'s `adjustment_id`.
+   `evt.inventory.adjust`'s `adjustment_id`.
    Two further managed-mode notification subjects ride the commit path:
-   `<prefix>.<kiosk_code>.event.alert.maintenance` — an instant, **batched
+   `<prefix>.<kiosk_code>.evt.alert.maintenance` — an instant, **batched
    one-per-transaction** alert listing every serialized unit a return routed
    into maintenance (dedup keyed on the transaction id) — and the scheduled
    `digest.maintenance` report (kiosk: local `item_instances` query;
    controller: live `instance.snapshot` fan-out filtered to
    `status=maintenance`). Both are rendered + sent via the controller's SMTP,
    same family as `alert.lowstock`.
-   `<prefix>.<kiosk_code>.event.timeclock.punch` fires once per accepted
+   `<prefix>.<kiosk_code>.evt.timeclock.punch` fires once per accepted
    punch (any source — self/foreman/admin/controller_admin), published by
    the punch funnel's callers via `handlers.PublishPunchEvent` (skipped on
    idempotent replays). The payload's `punch_id` (kiosk-side
@@ -236,7 +236,7 @@ Three invariants:
    either direction and any source — distinct from `reason`, which is required
    only for admin/corrective punches); pairing surfaces both ends of an
    interval as `note` (from the "in") and `out_note` (from the "out").
-   `<prefix>.<kiosk_code>.event.scan.rfid.observed` fires after every
+   `<prefix>.<kiosk_code>.evt.scan.rfid.observed` fires after every
    LLRP inventory cycle in either RFID mode and carries the full
    deduplicated EPC array (the read-window observability stream —
    no projector consumes it today; reserved for future drift
@@ -266,7 +266,7 @@ Three invariants:
      `last_observed_state` KV bucket, sliced per node like `catalog_items`
      (NOT WatchAll). Publish via the raw conn (`PublishBytes` /
      `sightings.PublishCustodyReads`), never `events.Publish`.
-   - **Commands** — `<prefix>.<kiosk_code>.command.<name>` (built via
+   - **Commands** — `<prefix>.<kiosk_code>.cmd.<name>` (built via
      `events.CommandSubject` / `events.CommandSubscribePattern`). Request/
      reply, single attempt, ≤5 s reply timeout. The kiosk's dispatcher
      replies on `msg.Reply` with a `{success, error, data}` envelope.

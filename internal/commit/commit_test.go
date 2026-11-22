@@ -622,10 +622,10 @@ func TestCommit_MixedCart_ProducesAllExpectedSideEffects(t *testing.T) {
 		t.Errorf("events: want 4, got %d (%v)", len(pub.events), pub.subjects())
 	}
 	wantSubjects := map[string]int{
-		"kiosk.TEST.event.transaction.complete": 1,
-		"kiosk.TEST.event.item.return":          1,
-		"kiosk.TEST.event.item.checkout":        1,
-		"kiosk.TEST.event.item.consume":         1,
+		"kiosk.TEST.evt.transaction.complete": 1,
+		"kiosk.TEST.evt.item.return":          1,
+		"kiosk.TEST.evt.item.checkout":        1,
+		"kiosk.TEST.evt.item.consume":         1,
 	}
 	gotSubjects := map[string]int{}
 	for _, s := range pub.subjects() {

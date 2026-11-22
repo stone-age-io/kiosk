@@ -38,6 +38,15 @@ func (p *natsPublisher) PublishBytes(subject string, data []byte) error {
 	return p.nc.Publish(subject, data)
 }
 
+// PublishEvent publishes an event with its Nats-Msg-Id header, so the stream
+// stores it once within its duplicate window (ADR 0008 rule 3). Still a core
+// publish: the client buffers it while disconnected, as before.
+func (p *natsPublisher) PublishEvent(subject, msgID string, data []byte) error {
+	msg := &nats.Msg{Subject: subject, Data: data, Header: nats.Header{}}
+	msg.Header.Set(jetstream.MsgIDHeader, msgID)
+	return p.nc.PublishMsg(msg)
+}
+
 func (p *natsPublisher) Close() {
 	if p == nil || p.nc == nil {
 		return

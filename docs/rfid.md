@@ -67,7 +67,7 @@ present. The flow is event-driven and NATS-orchestrated:
 1. **Cart start.** An access-control event (badge scan at the
    enclosure door, handled by an external system) publishes a
    `cart.start` NATS command at
-   `<prefix>.<kiosk_code>.command.cart.start` carrying `user_code` and
+   `<prefix>.<kiosk_code>.cmd.cart.start` carrying `user_code` and
    `enclosure_id`. The kiosk's command dispatcher creates or reuses a cart
    keyed `(user_code, enclosure_id)` — re-fires within the active window
    return the same cart_id. The cart is empty at this point.
@@ -76,7 +76,7 @@ present. The flow is event-driven and NATS-orchestrated:
    outside the binary.
 3. **Read trigger.** When occupancy ends (worker has stepped out), the
    external system publishes a `read.trigger` NATS command at
-   `<prefix>.<kiosk_code>.command.read.trigger` carrying the
+   `<prefix>.<kiosk_code>.cmd.read.trigger` carrying the
    `(user_code, enclosure_id)` of the active cart, or the `cart_id` if
    known. The kiosk runs one LLRP inventory cycle.
 4. **In-process diff.** Pure function over (observed EPCs, expected
@@ -345,8 +345,8 @@ semantics already documented in CLAUDE.md.
 
 | Subject | Payload | Reply |
 |---|---|---|
-| `<prefix>.<code>.command.cart.start` | `{user_code, enclosure_id, command_id}` | `{success, error, data: {cart_id, user_code, enclosure_id, reused}}` |
-| `<prefix>.<code>.command.read.trigger` | `{cart_id}` *or* `{user_code, enclosure_id}` (+ optional `command_id`) | `{success, error, data: {cart, added_lines, observed_epcs, unresolved_epcs, skipped_cross_user_count}}` |
+| `<prefix>.<code>.cmd.cart.start` | `{user_code, enclosure_id, command_id}` | `{success, error, data: {cart_id, user_code, enclosure_id, reused}}` |
+| `<prefix>.<code>.cmd.read.trigger` | `{cart_id}` *or* `{user_code, enclosure_id}` (+ optional `command_id`) | `{success, error, data: {cart, added_lines, observed_epcs, unresolved_epcs, skipped_cross_user_count}}` |
 
 Both commands MUST reply within the 5 s window even on error —
 silence renders "kiosk offline" at the caller. To hold that contract for
@@ -360,7 +360,7 @@ and replies with an error rather than hanging the caller. The `read_window`
 
 | Subject | When | Payload |
 |---|---|---|
-| `<prefix>.<code>.event.scan.rfid.observed` | After every completed read in either mode | `{kiosk_code, location_code, cart_id, enclosure_id, mode, observed_epcs, observed_at}` |
+| `<prefix>.<code>.evt.scan.rfid.observed` | After every completed read in either mode | `{kiosk_code, location_code, cart_id, enclosure_id, mode, observed_epcs, observed_at}` |
 
 The observed-EPCs event is cheap observability — it gives the
 controller (or any downstream consumer) a stream of "what tags have
@@ -494,7 +494,7 @@ window, decode TagReportData EPCs, send DisableROSpec / DeleteROSpec.
 New endpoint `POST /api/kiosk/cart/rfid-scan?cart_id=...` calls
 `rfid.ReadFor`, loops EPCs through `scan.Resolver`, adds each matched
 instance to the cart via the same write paths `cart/add` uses today.
-Returns the new lines. Publishes `event.scan.rfid.observed` after
+Returns the new lines. Publishes `evt.scan.rfid.observed` after
 every read. Frontend gets an "RFID scan" button on `CheckoutView`,
 gated on `rfid_enabled && rfid_mode === 'counter_scan'` from the
 identity payload. Button shows a brief "Reading… 3s" toast styled

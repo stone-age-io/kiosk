@@ -61,6 +61,7 @@ func BuildTransactionCompletePayload(in TransactionCompleteInput) map[string]any
 		"user_group":     in.UserGroup,
 		"started_at":     in.StartedAt,
 		"completed_at":   in.CompletedAt,
+		"ts":             TS(in.CompletedAt),
 		"lines_count":    in.LinesCount,
 		"checked_out":    in.CheckedOut,
 		"returned":       in.Returned,
@@ -133,6 +134,7 @@ func BuildItemActionPayload(in ItemActionInput) map[string]any {
 		"original_checkout_user_code": in.OriginalCheckoutUserCode,
 		"item_instance_id":            in.ItemInstanceID,
 		"completed_at":                in.CompletedAt,
+		"ts":                          TS(in.CompletedAt),
 	}
 }
 
@@ -180,6 +182,7 @@ func BuildInventoryAdjustPayload(in InventoryAdjustInput) map[string]any {
 		"controller_admin_id": in.ControllerAdminID,
 		"command_id":          in.CommandID,
 		"completed_at":        in.CompletedAt,
+		"ts":                  TS(in.CompletedAt),
 	}
 }
 
@@ -239,6 +242,7 @@ func BuildAdminClosePayload(in AdminCloseInput) map[string]any {
 		"controller_admin_id": in.ControllerAdminID,
 		"command_id":          in.CommandID,
 		"completed_at":        in.CompletedAt,
+		"ts":                  TS(in.CompletedAt),
 	}
 }
 
@@ -285,7 +289,7 @@ func BuildTimeclockPunchPayload(in TimeclockPunchInput) map[string]any {
 		"user_code":             in.UserCode,
 		"user_name":             in.UserName,
 		"direction":             in.Direction,
-		"occurred_at":           in.OccurredAt,
+		"ts":                    TS(in.OccurredAt),
 		"source":                in.Source,
 		"recorded_by_user_code": in.RecordedByUserCode,
 		"admin_id":              in.AdminID,
@@ -354,6 +358,7 @@ func BuildInstanceLifecyclePayload(in InstanceLifecycleInput) map[string]any {
 		"command_id":          in.CommandID,
 		"source_audit_id":     in.SourceAuditID,
 		"completed_at":        in.CompletedAt,
+		"ts":                  TS(in.CompletedAt),
 		"rfid_epc":            in.RFIDEPC,
 	}
 }

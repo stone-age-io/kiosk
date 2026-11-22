@@ -1,7 +1,7 @@
 // Package commands is the kiosk-side handler for controller→kiosk commands
 // arriving over NATS. The controller publishes JSON to
 //
-//	<prefix>.<kiosk_code>.command.<name>
+//	<prefix>.<kiosk_code>.cmd.<name>
 //
 // with a Reply inbox set. The dispatcher routes on <name> and replies with
 // a {success, error, data} envelope. Core NATS request/reply (not JetStream)
@@ -59,7 +59,7 @@ type Dispatcher struct {
 	logger    *slog.Logger
 	sub       *nats.Subscription
 	// prefix is the literal command-subject prefix for this kiosk, e.g.
-	// "kiosk.K01.command.". Cached at construction so subjectSuffix is a
+	// "kiosk.K01.cmd.". Cached at construction so subjectSuffix is a
 	// single TrimPrefix with no allocation per message.
 	prefix string
 
@@ -177,8 +177,8 @@ func (d *Dispatcher) onMessage(msg *nats.Msg) {
 }
 
 func (d *Dispatcher) subjectSuffix(subject string) string {
-	// Subject is "<prefix>.<code>.command.<name>". TrimPrefix on the cached
-	// "<prefix>.<code>.command." piece gives us "<name>" directly.
+	// Subject is "<prefix>.<code>.cmd.<name>". TrimPrefix on the cached
+	// "<prefix>.<code>.cmd." piece gives us "<name>" directly.
 	return strings.TrimPrefix(subject, d.prefix)
 }
 

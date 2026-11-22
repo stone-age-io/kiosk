@@ -25,7 +25,7 @@ func TestOnMessage_MissingReplyInboxSkipsDispatch(t *testing.T) {
 	})
 	// No Reply inbox → the caller isn't listening; we must not dispatch (and
 	// must not mutate state for a fire-and-forget with nowhere to answer).
-	d.onMessage(&nats.Msg{Subject: "kiosk.KIOSK01.command.probe", Data: []byte("{}")})
+	d.onMessage(&nats.Msg{Subject: "kiosk.KIOSK01.cmd.probe", Data: []byte("{}")})
 	if called {
 		t.Error("handler must not run when no reply inbox is set")
 	}
@@ -39,7 +39,7 @@ func TestOnMessage_RoutesKnownCommand(t *testing.T) {
 		called = true
 		return Reply{Success: true}
 	})
-	d.onMessage(&nats.Msg{Subject: "kiosk.KIOSK01.command.probe", Reply: "_INBOX.x", Data: []byte("{}")})
+	d.onMessage(&nats.Msg{Subject: "kiosk.KIOSK01.cmd.probe", Reply: "_INBOX.x", Data: []byte("{}")})
 	if !called {
 		t.Error("known command should route to its handler")
 	}
@@ -54,7 +54,7 @@ func TestOnMessage_PanicInHandlerRecovers(t *testing.T) {
 	// The documented contract: a handler panic must be recovered and answered,
 	// never take the subscriber goroutine down. If recover() were missing,
 	// this call would panic and fail the test.
-	d.onMessage(&nats.Msg{Subject: "kiosk.KIOSK01.command.boom", Reply: "_INBOX.x", Data: []byte("{}")})
+	d.onMessage(&nats.Msg{Subject: "kiosk.KIOSK01.cmd.boom", Reply: "_INBOX.x", Data: []byte("{}")})
 }
 
 func TestOnMessage_UnknownCommandDoesNotCrash(t *testing.T) {
@@ -62,5 +62,5 @@ func TestOnMessage_UnknownCommandDoesNotCrash(t *testing.T) {
 	d := NewDispatcher(app, "KIOSK01")
 	// Unknown suffix → structured "unknown command" reply, no dispatch, no
 	// crash. (Reaching the end of the test is the assertion.)
-	d.onMessage(&nats.Msg{Subject: "kiosk.KIOSK01.command.nope", Reply: "_INBOX.x", Data: []byte("{}")})
+	d.onMessage(&nats.Msg{Subject: "kiosk.KIOSK01.cmd.nope", Reply: "_INBOX.x", Data: []byte("{}")})
 }

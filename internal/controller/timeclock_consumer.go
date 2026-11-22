@@ -71,7 +71,7 @@ func (a *Aggregator) ProjectTimePunch(p EventPayload) projectOutcome {
 	rec.Set("user", user.Id)
 	rec.Set("user_code", p.UserCode)
 	rec.Set("direction", p.Direction)
-	rec.Set("occurred_at", p.OccurredAt)
+	rec.Set("occurred_at", p.TS)
 	rec.Set("source", p.Source)
 	switch p.Source {
 	case timeclock.SourceForeman:
@@ -140,13 +140,13 @@ func shouldReplacePunchState(existing, incoming timeclock.PunchStatePayload) boo
 // can't race itself. Failures log and the event still acks — the replica is
 // advisory by design.
 func (a *Aggregator) writePunchState(ctx context.Context, p EventPayload) {
-	if a.punchKV == nil || p.UserCode == "" || p.OccurredAt.IsZero() {
+	if a.punchKV == nil || p.UserCode == "" || p.TS.IsZero() {
 		return
 	}
 	incoming := timeclock.PunchStatePayload{
 		UserCode:      p.UserCode,
 		ClockedIn:     p.Direction == timeclock.DirectionIn,
-		OccurredAt:    p.OccurredAt,
+		OccurredAt:    p.TS,
 		SourcePunchID: p.PunchID,
 	}
 	if entry, err := a.punchKV.Get(ctx, p.UserCode); err == nil {

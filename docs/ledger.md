@@ -131,7 +131,7 @@ the simpler design can't provide:
   both write transactions for the same SKU without any coordination,
   and a downstream consumer can disambiguate by inspection.
 - **Event publishing is a fan-out of ledger writes, not a separate
-  protocol.** The `event.transaction.complete` and
+  protocol.** The `evt.transaction.complete` and
   `event.item.{action}` subjects carry the same facts the ledger rows
   do, in the same shape. There is no second commit hook for "tell the
   outside world" — the publish step reads from the freshly-written
@@ -205,24 +205,24 @@ Every ledger write produces events on a NATS subject. Subjects follow
 `<prefix>.<kiosk_code>.<family>.<...>`; the ledger contributes the
 `event.` family:
 
-- `event.transaction.complete` — one per commit.
+- `evt.transaction.complete` — one per commit.
 - `event.item.{action}` — one per line. `{action}` is `checkout`,
   `return`, `consume`, or `admin_close`.
 
 Two additional event subjects ride alongside but originate outside the
 commit path:
 
-- `event.inventory.adjust` — from admin stock adjustments
+- `evt.inventory.adjust` — from admin stock adjustments
   ([`stock_adjust.go`](../internal/handlers/stock_adjust.go)) and as
   the qty side-effect of `lost`/`damaged` admin closes of
   **quantity-tracked** items. Serialized closes don't emit it — the
-  unit's removal rides `event.instance.lifecycle` instead, and the
+  unit's removal rides `evt.instance.lifecycle` instead, and the
   derived quantity follows the active-instance count.
-- `event.instance.lifecycle` — from `item_instances` PB record hooks
+- `evt.instance.lifecycle` — from `item_instances` PB record hooks
   and from `commit.AdminClose` when retiring a serialized unit.
 
 The bind for the controller's JetStream stream is
-`kiosk.*.event.>` — commands (`command.`) and heartbeats (`heartbeat`)
+`kiosk.*.evt.>` — commands (`command.`) and heartbeats (`heartbeat`)
 ride core NATS and stay outside by construction rather than by
 filter-list discipline. Adding a new event subject means
 (1) adding a builder + filter helper in
@@ -251,7 +251,7 @@ A JetStream durable consumer named `controller-aggregator`
 ([`internal/controller/consumer.go`](../internal/controller/consumer.go))
 binds to the event subject family and projects:
 
-- `event.transaction.complete` → one `transactions` row.
+- `evt.transaction.complete` → one `transactions` row.
 - `event.item.{action}` → one `transaction_lines` row. The controller
   answers "currently-out" by replaying these lines on demand
   (`ledger.ReplayOpenRows`) rather than materializing an `open_checkouts`
@@ -263,17 +263,17 @@ binds to the event subject family and projects:
   foreman's cross-user return still closes the holder's row) — and broadcasts
   it to the `open_checkouts_state` KV bucket that feeds the fleet-wide
   clock-out gate.
-- `event.inventory.adjust` → one `inventory_audit` row (idempotent
+- `evt.inventory.adjust` → one `inventory_audit` row (idempotent
   via `source_adjustment_id`).
-- `event.instance.lifecycle` → one `instance_lifecycle_audit` row
+- `evt.instance.lifecycle` → one `instance_lifecycle_audit` row
   (idempotent via `source_audit_id`).
-- `event.checkout.admin_close` → one `transactions` row + one `admin_close`
+- `evt.checkout.admin_close` → one `transactions` row + one `admin_close`
   `transaction_lines` row (`ProjectAdminCloseToLedger`, mirroring
   `commit.AdminClose`'s local writes). An admin close publishes **only**
   this subject — never `transaction.complete` or `item.*` — so this event
   is the controller's sole view of it; projecting it as a line is what
   makes the replay drop the holder's row.
-- `event.integrity.rebuild` — acknowledged and logged today (audit hook
+- `evt.integrity.rebuild` — acknowledged and logged today (audit hook
   for a future ops view); there's nothing to rebuild now that the
   controller replays the ledger instead of materializing open_checkouts.
 

@@ -11,7 +11,7 @@ this doc is the readable mirror.
 ## Subject namespace
 
 ```
-<prefix>.<kiosk_code>.<family>.<...>
+<prefix>.<kiosk_code>.<channel>.<...>
 ```
 
 `<prefix>` defaults to `"kiosk"` and is configurable via
@@ -19,16 +19,18 @@ this doc is the readable mirror.
 `<kiosk_code>` is the per-kiosk identifier stamped on every
 transaction.
 
-`<family>` segment is what determines transport:
+The grammar is the ecosystem's, `{app}.{scope}.{channel}.{rest}` (ADR 0008 in
+platform-docs): the scope is the node's Thing code, and the `<channel>` segment
+is what determines transport:
 
-| Family | Direction | Transport | Persistence |
+| Channel | Direction | Transport | Persistence |
 |---|---|---|---|
-| `event.<...>` | kiosk → world | JetStream-bound | Stream (`KIOSK_EVENTS`, 7 d default retention) |
-| `command.<name>` | controller / external → kiosk | Core NATS request/reply | None (synchronous) |
+| `evt.<...>` | kiosk → world | JetStream-bound | Stream (`KIOSK_EVENTS`, 7 d default retention) |
+| `cmd.<name>` | controller / external → kiosk | Core NATS request/reply | None (synchronous) |
 | `heartbeat` | kiosk → world | Core NATS pub/sub | Last-write-wins, no history |
 | `sighting.raw` | gateway → world | Core NATS pub/sub | Lossy, last-write-wins, no history |
 
-The stream binds to `<prefix>.*.event.>` and nothing else, so commands,
+The stream binds to `<prefix>.*.evt.>` and nothing else, so commands,
 heartbeats, and sightings are outside its filter space **by construction**
 rather than by exclusion-list discipline.
 
@@ -54,7 +56,7 @@ Every command reply is the same JSON shape:
 ## Commands
 
 All commands ride core NATS request/reply at
-`<prefix>.<kiosk_code>.command.<name>`. The kiosk dispatcher
+`<prefix>.<kiosk_code>.cmd.<name>`. The kiosk dispatcher
 ([`internal/commands/dispatcher.go`](../internal/commands/dispatcher.go))
 routes on the `<name>` suffix.
 
@@ -381,7 +383,7 @@ handler so the controller needn't replay its ledger for out-status.
 ### `integrity.rebuild`
 
 Wipe `open_checkouts` and rebuild it from the kiosk's own ledger.
-Publishes `event.integrity.rebuild` after success.
+Publishes `evt.integrity.rebuild` after success.
 
 **Publisher.** controller
 
@@ -400,7 +402,7 @@ deterministic from the ledger).
 
 ### `ledger.republish`
 
-Re-emit `event.transaction.complete` + `event.item.<action>` for every
+Re-emit `evt.transaction.complete` + `evt.item.<action>` for every
 completed transaction in the optional window. Used to backfill the
 controller's projection after a NATS outage.
 
@@ -426,7 +428,7 @@ controller's projection after a NATS outage.
 
 Record a clock-in/out punch AT the kiosk on behalf of a controller admin.
 The kiosk is the only punch writer — the controller's own ledger learns
-about the punch by consuming the resulting `event.timeclock.punch`, same
+about the punch by consuming the resulting `evt.timeclock.punch`, same
 as every other punch. Backdating (`occurred_at`) and `force` (bypass the
 open-checkouts clock-out block) follow the kiosk's admin punch rules;
 `reason` is always required. Replies with an error when timeclock is not
@@ -460,7 +462,7 @@ not publish a second event.
 
 ### `timeclock.republish`
 
-Re-emit `event.timeclock.punch` for every punch in the optional window.
+Re-emit `evt.timeclock.punch` for every punch in the optional window.
 Sibling of `ledger.republish` for the punch ledger.
 
 **Publisher.** controller
@@ -621,11 +623,25 @@ the same reason (the read runs synchronously inside this reply window).
 
 ## Events
 
-All events ride JetStream at `<prefix>.<kiosk_code>.event.<...>`. Every
+All events ride JetStream at `<prefix>.<kiosk_code>.evt.<...>`. Every
 event is also logged via `slog.Info("kiosk.event", ...)` regardless of
 whether NATS is enabled.
 
-### `event.transaction.complete`
+Every event follows ADR 0008 rule 3:
+
+- **`ts`** is an RFC 3339 UTC time for when the thing happened. Each payload
+  sets it from its own time (a transaction's `completed_at`, a punch's
+  business time), so a republished event keeps its original `ts`. Domain
+  fields such as `completed_at` stay beside it.
+- **`Nats-Msg-Id`** is set on every publish. For an event with a record id it
+  is stable, `<kind>:<id>` (`transaction.complete:<transaction_id>`,
+  `item.<action>:<line_id>`, `checkout.admin_close:<line_id>`,
+  `inventory.adjust:<adjustment_id>`, `timeclock.punch:<punch_id>`,
+  `instance.lifecycle:<source_audit_id>`), so a `ledger.republish` or
+  `timeclock.republish` inside the stream's duplicate window is stored once.
+  Alerts, receipts, RFID reads and rebuilds get a fresh id.
+
+### `evt.transaction.complete`
 
 Fires once per successful cart commit, after the DB transaction.
 
@@ -648,7 +664,7 @@ Fires once per successful cart commit, after the DB transaction.
 }
 ```
 
-### `event.item.<action>`
+### `evt.item.<action>`
 
 One event per `transaction_lines` row. `<action>` is one of
 `checkout`, `return`, `consume`, `admin_close`. Same payload shape
@@ -675,7 +691,7 @@ across actions; `action` field discriminates downstream.
 }
 ```
 
-### `event.inventory.adjust`
+### `evt.inventory.adjust`
 
 Fires after every accepted stock adjustment, whether the local HTTP
 endpoint or the `inventory.adjust` command was the source.
@@ -704,7 +720,7 @@ endpoint or the `inventory.adjust` command was the source.
 `adjustment_id` is the controller's idempotency anchor when projecting
 into `inventory_audit`.
 
-### `event.integrity.rebuild`
+### `evt.integrity.rebuild`
 
 Fires after a successful `open_checkouts` rebuild, whether triggered
 locally or by command.
@@ -712,10 +728,10 @@ locally or by command.
 **Payload.** `{deleted, inserted, source ("local" | "controller"),
 controller_admin_id?, command_id?, kiosk_code, location_code}`.
 
-### `event.checkout.admin_close`
+### `evt.checkout.admin_close`
 
 Fires once per row closed via `commit.AdminClose`. Distinct from
-`event.item.return` so reports can separate "worker returned it" from
+`evt.item.return` so reports can separate "worker returned it" from
 "admin closed it without a return" without filtering on a
 discriminator.
 
@@ -728,11 +744,11 @@ discriminator.
 }
 ```
 
-The same close also rides `event.transaction.complete` (one
-`admin_close` transaction) and `event.item.admin_close` (one line) —
+The same close also rides `evt.transaction.complete` (one
+`admin_close` transaction) and `evt.item.admin_close` (one line) —
 the dedicated subject is in addition, not instead.
 
-### `event.instance.lifecycle`
+### `evt.instance.lifecycle`
 
 Fires on every `item_instances` status transition: `create` /
 `to_maintenance` (in_service→maintenance) / `return_to_service`
@@ -749,7 +765,7 @@ EPC→owning-unit map the sighting ingest resolves against (location/sightings
 L3). Empty for untagged units; a bare cosmetic EPC change emits no event, so
 the index refreshes on the next create/status transition.
 
-### `event.timeclock.punch`
+### `evt.timeclock.punch`
 
 Fires once per accepted punch, any source (`self` / `foreman` / `admin` /
 `controller_admin`). Idempotent replays of command-bus punches do **not**
@@ -765,7 +781,7 @@ re-publish.
   "user_code": "EMP-2",
   "user_name": "Bob",
   "direction": "in" | "out",
-  "occurred_at": "RFC3339 — business timestamp (backdatable by admins)",
+  "ts": "RFC 3339 UTC — business timestamp (backdatable by admins)",
   "source": "self" | "foreman" | "admin" | "controller_admin",
   "recorded_by_user_code": "foreman's code (source=foreman)",
   "admin_id": "kiosk admins.id (source=admin)",
@@ -799,7 +815,7 @@ funnel merges it with this kiosk's local `open_checkouts` (partitioned by
 when the replica is absent, and bypassable by a worker "clock out anyway"
 acknowledgment (`acknowledge:true` → `force` on the punch).
 
-### `event.scan.rfid.observed`
+### `evt.scan.rfid.observed`
 
 Fires after every completed LLRP inventory cycle in either RFID mode.
 Cheap observability — no projector consumes it today; the stream
@@ -818,20 +834,20 @@ captures it for future drift detection and analytics.
 }
 ```
 
-### `event.receipt.transaction` (managed mode only)
+### `evt.receipt.transaction` (managed mode only)
 
-Fires alongside `event.transaction.complete` when the kiosk is
+Fires alongside `evt.transaction.complete` when the kiosk is
 managed by a controller. Carries pre-rendered receipt context for the
 controller's notifier to template + send. See
 [Notifications](notifications.md).
 
-### `event.alert.lowstock` (managed mode only)
+### `evt.alert.lowstock` (managed mode only)
 
 Fires when an item crosses its `reorder_threshold` downward. Carries
 low-stock context for the controller's notifier. See
 [Notifications](notifications.md).
 
-### `event.alert.maintenance` (managed mode only)
+### `evt.alert.maintenance` (managed mode only)
 
 Fires when a cart commit routes one or more returned serialized units
 into maintenance (per-SKU `requires_maintenance_on_return`, a per-line
@@ -933,7 +949,7 @@ now at ingest.
 
 Tail every event:
 ```bash
-nats sub "kiosk.*.event.>"
+nats sub "kiosk.*.evt.>"
 ```
 
 Tail one kiosk:
@@ -943,7 +959,7 @@ nats sub "kiosk.KC-MAIN-01.>"
 
 Tail commands going to one kiosk (catches retries and external pubs):
 ```bash
-nats sub "kiosk.KC-MAIN-01.command.>"
+nats sub "kiosk.KC-MAIN-01.cmd.>"
 ```
 
 Tail heartbeats:

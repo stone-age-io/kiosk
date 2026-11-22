@@ -74,7 +74,7 @@ scan, defaults the action (`handlers.defaultActionFor`), validates
 (`commit.Commit`), writes the ledger and publishes the events. The controller
 projects them through its ordinary durable consumer.
 
-> **The demo rules MUST NOT publish on `kiosk.*.event.>`.**
+> **The demo rules MUST NOT publish on `kiosk.*.evt.>`.**
 
 That single line is the difference between this demo and the one access-control
 retired. A forged `transaction.complete` would fill the controller's ledger while
@@ -696,16 +696,16 @@ subject prefix is `kiosk.{thing}`, and `TestKioskSubjectPrefixesMatchTheWireForm
 holds it there.
 
 **Operations** — sixteen, one per real subject, in `contract.go`. The ledger four
-(`event.transaction.complete`, `event.item.{checkout,return,consume}`), the
-admin-close (`event.checkout.admin_close`), inventory and instance audits, the
-punch, the three notification contexts (`event.receipt.transaction`,
-`event.alert.lowstock`, `event.alert.maintenance`), `event.integrity.rebuild`,
-`event.scan.rfid.observed`, the `heartbeat`, `command.>` and `sighting.raw`.
+(`evt.transaction.complete`, `event.item.{checkout,return,consume}`), the
+admin-close (`evt.checkout.admin_close`), inventory and instance audits, the
+punch, the three notification contexts (`evt.receipt.transaction`,
+`evt.alert.lowstock`, `evt.alert.maintenance`), `evt.integrity.rebuild`,
+`evt.scan.rfid.observed`, the `heartbeat`, `cmd.>` and `sighting.raw`.
 
 The item-action question this document left open resolved itself the moment it was
 written down: **one operation per action, not a wildcard.** A publish operation
-resolves to a subject something actually publishes *on*, and `event.item.>` is not
-one. `command.>` keeps its wildcard for the opposite reason — it is a
+resolves to a subject something actually publishes *on*, and `evt.item.>` is not
+one. `cmd.>` keeps its wildcard for the opposite reason — it is a
 *subscription* pattern, and the twenty-odd command leaves are registered in the
 dispatcher, so enumerating them in a second place would guarantee only that the
 two drift.

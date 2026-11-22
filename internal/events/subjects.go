@@ -7,17 +7,20 @@ import (
 
 // Subject namespace.
 //
-// Every NATS subject this codebase publishes or subscribes to lives under
-// "<prefix>.<kiosk_code>.<family>.<...>" where the family is one of:
+// Every NATS subject this codebase publishes or subscribes to follows the
+// ecosystem's grammar (ADR 0008 in platform-docs), {app}.{scope}.{channel}
+// .{rest}: "<prefix>.<kiosk_code>.<channel>.<...>", where the scope is the
+// node's Thing code and the channel is one of:
 //
-//	event.<...>     kiosk -> controller, durable, JetStream
-//	command.<...>   controller -> kiosk, core NATS request/reply
+//	evt.<...>       kiosk -> controller, durable, JetStream
+//	cmd.<...>       controller -> kiosk, core NATS request/reply
 //	heartbeat       kiosk -> world, core NATS pub/sub, last-write-wins
 //	sighting.raw    gateway -> world, core NATS pub/sub, lossy last-write-wins
 //
-// The family segment is what makes "is this in the stream?" answerable
-// without thinking: the stream binds to "<prefix>.*.event.>" and that's it.
-// Commands and heartbeats are outside the stream's filter space by
+// sighting is kiosk's own channel for raw input, which ADR 0008 allows because
+// no stream captures it. The channel is what makes "is this in the stream?"
+// answerable without thinking: the stream binds to "<prefix>.*.evt.>" and
+// that's it. Commands and heartbeats are outside the stream's filter space by
 // construction, not by exclusion-list discipline.
 //
 // Wire reference: docs/wire.md — payload shapes per subject.
@@ -54,104 +57,104 @@ func SubjectPrefix() string {
 
 // TransactionCompleteSubject builds the subject for a transaction-complete
 // event from a specific kiosk:
-// "<prefix>.<kiosk_code>.event.transaction.complete".
+// "<prefix>.<kiosk_code>.evt.transaction.complete".
 func TransactionCompleteSubject(kioskCode string) string {
-	return fmt.Sprintf("%s.%s.event.transaction.complete", SubjectPrefix(), kioskCode)
+	return fmt.Sprintf("%s.%s.evt.transaction.complete", SubjectPrefix(), kioskCode)
 }
 
 // ItemActionSubject builds the subject for a single line's action event:
-// "<prefix>.<kiosk_code>.event.item.<action>".
+// "<prefix>.<kiosk_code>.evt.item.<action>".
 func ItemActionSubject(kioskCode, action string) string {
-	return fmt.Sprintf("%s.%s.event.item.%s", SubjectPrefix(), kioskCode, action)
+	return fmt.Sprintf("%s.%s.evt.item.%s", SubjectPrefix(), kioskCode, action)
 }
 
 // InventoryAdjustSubject builds the subject for an admin stock-adjustment
-// event: "<prefix>.<kiosk_code>.event.inventory.adjust". One event per
+// event: "<prefix>.<kiosk_code>.evt.inventory.adjust". One event per
 // accepted adjustment, emitted after the audit row commits.
 func InventoryAdjustSubject(kioskCode string) string {
-	return fmt.Sprintf("%s.%s.event.inventory.adjust", SubjectPrefix(), kioskCode)
+	return fmt.Sprintf("%s.%s.evt.inventory.adjust", SubjectPrefix(), kioskCode)
 }
 
 // IntegrityRebuildSubject builds the subject for the destructive
 // open_checkouts rebuild event:
-// "<prefix>.<kiosk_code>.event.integrity.rebuild". Low-frequency,
+// "<prefix>.<kiosk_code>.evt.integrity.rebuild". Low-frequency,
 // high-signal — used for operator audit and (eventually) surfacing rebuild
 // events in the controller's admin UI.
 func IntegrityRebuildSubject(kioskCode string) string {
-	return fmt.Sprintf("%s.%s.event.integrity.rebuild", SubjectPrefix(), kioskCode)
+	return fmt.Sprintf("%s.%s.evt.integrity.rebuild", SubjectPrefix(), kioskCode)
 }
 
 // AdminCloseSubject builds the subject for an admin-initiated open_checkouts
-// close event: "<prefix>.<kiosk_code>.event.checkout.admin_close". One event
+// close event: "<prefix>.<kiosk_code>.evt.checkout.admin_close". One event
 // per closed row, emitted after the transaction+line+open-row delete commits.
 // Distinct from item.return so reports can separate "worker returned it" from
 // "admin closed it without a return" without a discriminator filter.
 func AdminCloseSubject(kioskCode string) string {
-	return fmt.Sprintf("%s.%s.event.checkout.admin_close", SubjectPrefix(), kioskCode)
+	return fmt.Sprintf("%s.%s.evt.checkout.admin_close", SubjectPrefix(), kioskCode)
 }
 
 // InstanceLifecycleSubject builds the subject for an item_instances lifecycle
-// event: "<prefix>.<kiosk_code>.event.instance.lifecycle". Fired on create and
+// event: "<prefix>.<kiosk_code>.evt.instance.lifecycle". Fired on create and
 // every status transition (in_service ⇄ maintenance ⇄ retired). Cosmetic edits
 // and status-unchanged updates don't publish.
 func InstanceLifecycleSubject(kioskCode string) string {
-	return fmt.Sprintf("%s.%s.event.instance.lifecycle", SubjectPrefix(), kioskCode)
+	return fmt.Sprintf("%s.%s.evt.instance.lifecycle", SubjectPrefix(), kioskCode)
 }
 
 // ReceiptTransactionSubject builds the subject for a "render and send the
 // transaction receipt" notification event:
-// "<prefix>.<kiosk_code>.event.receipt.transaction". Payload is a
+// "<prefix>.<kiosk_code>.evt.receipt.transaction". Payload is a
 // notifications.ReceiptContext serialized as JSON. The controller's notifier
 // consumes it, looks up the template, and sends. This is the managed-mode
 // counterpart to the kiosk's local Notifier.Send call — the kiosk publishes
 // structured context, the controller does the rendering and SMTP.
 func ReceiptTransactionSubject(kioskCode string) string {
-	return fmt.Sprintf("%s.%s.event.receipt.transaction", SubjectPrefix(), kioskCode)
+	return fmt.Sprintf("%s.%s.evt.receipt.transaction", SubjectPrefix(), kioskCode)
 }
 
 // LowStockAlertSubject builds the subject for a low-stock alert notification:
-// "<prefix>.<kiosk_code>.event.alert.lowstock". Payload is a
+// "<prefix>.<kiosk_code>.evt.alert.lowstock". Payload is a
 // notifications.LowStockContext serialized as JSON. The kiosk owns the
 // threshold-crossing detection (it has the inventory) and publishes only on
 // a real cross; the controller renders + sends.
 func LowStockAlertSubject(kioskCode string) string {
-	return fmt.Sprintf("%s.%s.event.alert.lowstock", SubjectPrefix(), kioskCode)
+	return fmt.Sprintf("%s.%s.evt.alert.lowstock", SubjectPrefix(), kioskCode)
 }
 
 // MaintenanceAlertSubject builds the subject for a maintenance alert
-// notification: "<prefix>.<kiosk_code>.event.alert.maintenance". Payload is a
+// notification: "<prefix>.<kiosk_code>.evt.alert.maintenance". Payload is a
 // notifications.MaintenanceContext serialized as JSON, batched one per
 // transaction. The kiosk owns the maintenance-on-return detection; the
 // controller renders + sends. Mirrors LowStockAlertSubject.
 func MaintenanceAlertSubject(kioskCode string) string {
-	return fmt.Sprintf("%s.%s.event.alert.maintenance", SubjectPrefix(), kioskCode)
+	return fmt.Sprintf("%s.%s.evt.alert.maintenance", SubjectPrefix(), kioskCode)
 }
 
 // TimeclockPunchSubject builds the subject for a timeclock punch event:
-// "<prefix>.<kiosk_code>.event.timeclock.punch". One event per accepted
+// "<prefix>.<kiosk_code>.evt.timeclock.punch". One event per accepted
 // punch (clock-in or clock-out, any source), emitted after the time_punches
 // row commits. The payload's punch_id is the kiosk-side time_punches.id —
 // the controller's projection anchors idempotency on it (source_punch_id),
 // same strategy as inventory.adjust's adjustment_id.
 func TimeclockPunchSubject(kioskCode string) string {
-	return fmt.Sprintf("%s.%s.event.timeclock.punch", SubjectPrefix(), kioskCode)
+	return fmt.Sprintf("%s.%s.evt.timeclock.punch", SubjectPrefix(), kioskCode)
 }
 
 // TimeclockPunchFilter is the controller-side consumer filter for the
 // timeclock punch subject.
 func TimeclockPunchFilter() string {
-	return SubjectPrefix() + ".*.event.timeclock.punch"
+	return SubjectPrefix() + ".*.evt.timeclock.punch"
 }
 
 // ScanRFIDObservedSubject builds the subject for a "completed RFID read
-// window" event: "<prefix>.<kiosk_code>.event.scan.rfid.observed". One
+// window" event: "<prefix>.<kiosk_code>.evt.scan.rfid.observed". One
 // event per ReadFor call (counter_scan or enclosure_diff), carrying the
 // full deduplicated EPC array plus the cart_id the read was scoped to.
 // Cheap observability — no projector consumes it today; the stream
 // captures it for future drift detection and analytics. See
 // docs/rfid.md.
 func ScanRFIDObservedSubject(kioskCode string) string {
-	return fmt.Sprintf("%s.%s.event.scan.rfid.observed", SubjectPrefix(), kioskCode)
+	return fmt.Sprintf("%s.%s.evt.scan.rfid.observed", SubjectPrefix(), kioskCode)
 }
 
 // ScanRFIDObservedFilter is the controller-side consumer filter for
@@ -159,14 +162,14 @@ func ScanRFIDObservedSubject(kioskCode string) string {
 // reserved so a future Watch/Audit hook can subscribe without
 // re-stringing the pattern.
 func ScanRFIDObservedFilter() string {
-	return SubjectPrefix() + ".*.event.scan.rfid.observed"
+	return SubjectPrefix() + ".*.evt.scan.rfid.observed"
 }
 
 // StreamSubjectFilter is the subject pattern the controller's JetStream
-// stream binds to: "<prefix>.*.event.>". Only events live in the stream;
+// stream binds to: "<prefix>.*.evt.>". Only events live in the stream;
 // commands and heartbeats are core-NATS-only and ride outside this filter.
 func StreamSubjectFilter() string {
-	return SubjectPrefix() + ".*.event.>"
+	return SubjectPrefix() + ".*.evt.>"
 }
 
 // TransactionCompleteFilter, ItemActionFilter, InventoryAdjustFilter, and
@@ -176,65 +179,65 @@ func StreamSubjectFilter() string {
 // yet projected into ledger state — they reach the controller for future
 // reporting hooks and as an audit signal in slog.
 func TransactionCompleteFilter() string {
-	return SubjectPrefix() + ".*.event.transaction.complete"
+	return SubjectPrefix() + ".*.evt.transaction.complete"
 }
 
 func ItemActionFilter() string {
-	return SubjectPrefix() + ".*.event.item.*"
+	return SubjectPrefix() + ".*.evt.item.*"
 }
 
 func InventoryAdjustFilter() string {
-	return SubjectPrefix() + ".*.event.inventory.adjust"
+	return SubjectPrefix() + ".*.evt.inventory.adjust"
 }
 
 func IntegrityRebuildFilter() string {
-	return SubjectPrefix() + ".*.event.integrity.rebuild"
+	return SubjectPrefix() + ".*.evt.integrity.rebuild"
 }
 
 // AdminCloseFilter is the controller-side consumer filter for the admin
 // force-close subject.
 func AdminCloseFilter() string {
-	return SubjectPrefix() + ".*.event.checkout.admin_close"
+	return SubjectPrefix() + ".*.evt.checkout.admin_close"
 }
 
 // InstanceLifecycleFilter is the controller-side consumer filter for the
 // item_instances lifecycle subject.
 func InstanceLifecycleFilter() string {
-	return SubjectPrefix() + ".*.event.instance.lifecycle"
+	return SubjectPrefix() + ".*.evt.instance.lifecycle"
 }
 
 // ReceiptTransactionFilter is the controller-side consumer filter for the
 // receipt notification subject.
 func ReceiptTransactionFilter() string {
-	return SubjectPrefix() + ".*.event.receipt.transaction"
+	return SubjectPrefix() + ".*.evt.receipt.transaction"
 }
 
 // LowStockAlertFilter is the controller-side consumer filter for the
 // low-stock notification subject.
 func LowStockAlertFilter() string {
-	return SubjectPrefix() + ".*.event.alert.lowstock"
+	return SubjectPrefix() + ".*.evt.alert.lowstock"
 }
 
 // MaintenanceAlertFilter is the controller-side consumer filter for the
 // maintenance alert notification subject.
 func MaintenanceAlertFilter() string {
-	return SubjectPrefix() + ".*.event.alert.maintenance"
+	return SubjectPrefix() + ".*.evt.alert.maintenance"
 }
 
 // CommandSubject builds the subject for a controller→kiosk command targeting
-// a specific kiosk: "<prefix>.<kiosk_code>.command.<name>". Commands ride
+// a specific kiosk: "<prefix>.<kiosk_code>.cmd.<name>". Commands ride
 // core NATS request/reply, not JetStream — they are synchronous, single
 // attempt, and should fail fast when the kiosk is offline rather than queue
 // indefinitely. The kiosk replies on msg.Reply with a JSON outcome.
 func CommandSubject(kioskCode, name string) string {
-	return fmt.Sprintf("%s.%s.command.%s", SubjectPrefix(), kioskCode, name)
+	return fmt.Sprintf("%s.%s.cmd.%s", SubjectPrefix(), kioskCode, name)
 }
 
 // CommandSubscribePattern is the subscription pattern a kiosk uses to receive
 // all commands addressed to it. New command names are absorbed by the same
 // subscription — the kiosk's dispatcher routes on the suffix.
 func CommandSubscribePattern(kioskCode string) string {
-	return fmt.Sprintf("%s.%s.command.>", SubjectPrefix(), kioskCode)
+	return fmt.Sprintf("%s.%s.cmd.>", SubjectPrefix(), kioskCode)
 }
 
 // InventoryAdjustCommandSubject is the controller→kiosk command that mutates
@@ -373,7 +376,7 @@ func HeartbeatFilter() string {
 // "<prefix>.<node_code>.sighting.raw". A new family `sighting`, sibling of
 // event/command/heartbeat — core NATS pub/sub, lossy, last-write-wins, OUTSIDE
 // the durable JetStream stream by construction (the stream binds only to
-// "<prefix>.*.event.>"). Sightings are high-volume and we only ever want
+// "<prefix>.*.evt.>"). Sightings are high-volume and we only ever want
 // latest, so a dropped one self-heals on the next read. Publish via the raw
 // conn, never events.Publish — it is not an event. The wire payload is always
 // RAW (carries tag_id, never a resolved instance code); resolution happens

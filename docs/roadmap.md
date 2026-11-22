@@ -32,7 +32,7 @@ These started as deferred roadmap items and are now live in the binary:
   each item. Kiosks can also be pre-registered by an admin before
   they phone home so memberships can be assigned ahead of time.
 - **Controller→kiosk command bus.** Core NATS request/reply (not
-  JetStream) under `{prefix}.{kiosk_code}.command.<name>`. v1 shipped
+  JetStream) under `{prefix}.{kiosk_code}.cmd.<name>`. v1 shipped
   `inventory.adjust` (mutating, idempotent via a server-generated
   `command_id` unique-indexed on `stock_adjustments`) and
   `inventory.snapshot` (read-only); the bus has since grown to cover
@@ -165,7 +165,7 @@ These started as deferred roadmap items and are now live in the binary:
   state via `rfid.Diff` and synthesizes self-return / checkout cart
   lines. Cross-user returns are skip-and-counted (the commit-time
   foreman gate would reject them anyway). Every read publishes
-  `event.scan.rfid.observed` for downstream audit. A small SSE
+  `evt.scan.rfid.observed` for downstream audit. A small SSE
   channel (`GET /api/kiosk/cart/events`) lets the SPA refetch on any
   cart write — the same broker absorbs both modes plus the existing
   HTTP write paths. Trust boundary stays 127.0.0.1; external systems

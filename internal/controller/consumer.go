@@ -113,11 +113,12 @@ type EventPayload struct {
 	// the idempotency anchor (projected as source_punch_id). Source here is
 	// the punch-source enum (self/foreman/admin/controller_admin), wider
 	// than the local/controller pair the other events carry — both decode
-	// into the same string field. OccurredAt is the business timestamp the
+	// into the same string field. TS is every event's "ts" (ADR 0008); on a punch it
+	// is the business timestamp (backdatable, so not the publish time) the
 	// KV punch-state projection orders on.
 	PunchID            string    `json:"punch_id,omitempty"`
 	Direction          string    `json:"direction,omitempty"`
-	OccurredAt         time.Time `json:"occurred_at,omitempty"`
+	TS                 time.Time `json:"ts,omitempty"`
 	RecordedByUserCode string    `json:"recorded_by_user_code,omitempty"`
 	Force              bool      `json:"force,omitempty"`
 	JobCode            string    `json:"job_code,omitempty"`
@@ -270,9 +271,9 @@ func EnsureStream(ctx context.Context, js jetstream.JetStream, streamName string
 	}
 	cfg := jetstream.StreamConfig{
 		Name:        streamName,
-		Description: "Per-kiosk events (kiosk.*.event.>). Consumed by the controller.",
+		Description: "Per-kiosk events (kiosk.*.evt.>). Consumed by the controller.",
 		// Stream owns only the event subject space. Commands
-		// (kiosk.*.command.>) and heartbeats (kiosk.*.heartbeat) ride core
+		// (kiosk.*.cmd.>) and heartbeats (kiosk.*.heartbeat) ride core
 		// NATS and are outside this filter by construction.
 		Subjects:  []string{events.StreamSubjectFilter()},
 		Retention: jetstream.LimitsPolicy,
@@ -280,10 +281,11 @@ func EnsureStream(ctx context.Context, js jetstream.JetStream, streamName string
 		Storage:   jetstream.FileStorage,
 		Replicas:  1,
 	}
-	// CreateOrUpdateStream is idempotent for compatible changes. Narrowing
-	// Subjects on a stream that already holds messages outside the new
-	// pattern will fail — operators upgrading from the old "kiosk.>" stream
-	// must `nats stream rm KIOSK_EVENTS` once so this call recreates it.
+	// CreateOrUpdateStream is idempotent, and it also moves an existing
+	// stream to new subjects: nats-server 2.14 accepts a subject change on a
+	// stream that holds messages under the old pattern, and the consumers'
+	// filters are updated the same way below. That is how the ADR 0008 move
+	// from "<prefix>.*.event.>" to "<prefix>.*.evt.>" reaches a deployment.
 	return js.CreateOrUpdateStream(ctx, cfg)
 }
 

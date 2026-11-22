@@ -44,8 +44,8 @@ of truth for catalog plus a unified transaction ledger.
   pass. Until then a managed kiosk reads the absent field as `false`,
   which is the behaviour it already had.
 - **Transactions up → controller.** Every kiosk already publishes
-  `{prefix}.{code}.event.transaction.complete` and
-  `{prefix}.{code}.event.item.{action}` when NATS is enabled (`{prefix}`
+  `{prefix}.{code}.evt.transaction.complete` and
+  `{prefix}.{code}.evt.item.{action}` when NATS is enabled (`{prefix}`
   defaults to `kiosk`). The controller runs a JetStream durable
   consumer (`controller-aggregator`) over the `KIOSK_EVENTS` stream
   (configurable via `nats.stream_name`) that projects every incoming
@@ -53,7 +53,7 @@ of truth for catalog plus a unified transaction ledger.
   Idempotency keys (`source_kiosk_code + source_transaction_id` on
   transactions, `source_line_id` on lines) make redelivery safe.
 - **Timeclock punches up, clocked-in state down.** When a managed kiosk
-  records a punch it publishes `{prefix}.{code}.event.timeclock.punch`; the
+  records a punch it publishes `{prefix}.{code}.evt.timeclock.punch`; the
   aggregator projects it into the controller's own `time_punches`
   (idempotent on `source_punch_id`) and writes the worker's merged state to
   the `punch_state` KV bucket (keyed by `user_code`, monotonic on
@@ -101,7 +101,7 @@ of truth for catalog plus a unified transaction ledger.
   (`POST /api/controller/kiosks/{code}/inventory/adjust`,
   `GET /api/controller/kiosks/{code}/inventory`). The controller
   proxies admin clicks to the target kiosk over core NATS
-  request/reply on `{prefix}.{kiosk_code}.command.<name>`. The kiosk
+  request/reply on `{prefix}.{kiosk_code}.cmd.<name>`. The kiosk
   runs the same `PerformStockAdjustment` business logic the local
   HTTP path does — including rejecting serialized items, whose
   quantity is derived from their non-retired instance count (manage those
@@ -283,7 +283,7 @@ separately. JetStream must be enabled (`nats-server -js`). Provision
 the stream and KV buckets once, out of band:
 
 ```bash
-nats stream add KIOSK_EVENTS --subjects 'kiosk.*.event.>' --retention limits --max-age 168h
+nats stream add KIOSK_EVENTS --subjects 'kiosk.*.evt.>' --retention limits --max-age 168h
 nats kv add catalog_items --history 1
 nats kv add catalog_users --history 1
 nats kv add catalog_groups --history 1
@@ -293,7 +293,7 @@ nats kv add catalog_groups --history 1
 manual form is here so operators have a record of what's provisioned.)
 
 The stream binds to only the `event.` subject family. Commands
-(`kiosk.*.command.>`) and heartbeats (`kiosk.*.heartbeat`) ride core
+(`kiosk.*.cmd.>`) and heartbeats (`kiosk.*.heartbeat`) ride core
 NATS — they're outside the stream's filter by construction, so the
 controller→kiosk request/reply path never races against a JetStream
 PubAck. Adding a future durable subject means putting it under

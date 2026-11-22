@@ -33,7 +33,7 @@ import (
 const ReadTriggerBudget = 4500 * time.Millisecond
 
 // cartStartRequest is the payload external systems publish on
-// <prefix>.<kiosk_code>.command.cart.start. command_id is for
+// <prefix>.<kiosk_code>.cmd.cart.start. command_id is for
 // caller-side traceability; the kiosk doesn't use it for dedup —
 // the (user_code, enclosure_id) key in the cart store does that.
 type cartStartRequest struct {

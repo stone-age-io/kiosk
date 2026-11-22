@@ -299,11 +299,11 @@ func TestInventorySnapshot_FilteredCodes(t *testing.T) {
 // the routing primitive that maps an incoming NATS subject to a handler.
 func TestSubjectSuffix(t *testing.T) {
 	d := NewDispatcher(nil, "K01")
-	got := d.subjectSuffix("kiosk.K01.command.inventory.adjust")
+	got := d.subjectSuffix("kiosk.K01.cmd.inventory.adjust")
 	if got != "inventory.adjust" {
 		t.Errorf("suffix: got %q, want %q", got, "inventory.adjust")
 	}
-	got2 := d.subjectSuffix("kiosk.K01.command.something.else")
+	got2 := d.subjectSuffix("kiosk.K01.cmd.something.else")
 	if got2 != "something.else" {
 		t.Errorf("suffix: got %q, want %q", got2, "something.else")
 	}

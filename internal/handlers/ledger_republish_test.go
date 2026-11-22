@@ -118,20 +118,20 @@ func TestRepublishLedger_EmitsAllCompletedTransactions(t *testing.T) {
 	}
 
 	// Expected events, in walk order (completed_at ASC):
-	//   1. kiosk.KIOSK-A.event.transaction.complete  (tx1)
-	//   2. kiosk.KIOSK-A.event.item.checkout         (tx1's line)
-	//   3. kiosk.KIOSK-A.event.transaction.complete  (tx2)
-	//   4. kiosk.KIOSK-A.event.item.consume          (tx2's line)
+	//   1. kiosk.KIOSK-A.evt.transaction.complete  (tx1)
+	//   2. kiosk.KIOSK-A.evt.item.checkout         (tx1's line)
+	//   3. kiosk.KIOSK-A.evt.transaction.complete  (tx2)
+	//   4. kiosk.KIOSK-A.evt.item.consume          (tx2's line)
 	if len(sink.events) != 4 {
 		t.Fatalf("events: want 4, got %d", len(sink.events))
 	}
-	if sink.events[0].Subject != "kiosk.KIOSK-A.event.transaction.complete" {
+	if sink.events[0].Subject != "kiosk.KIOSK-A.evt.transaction.complete" {
 		t.Errorf("event 0 subject: %s", sink.events[0].Subject)
 	}
-	if sink.events[1].Subject != "kiosk.KIOSK-A.event.item.checkout" {
+	if sink.events[1].Subject != "kiosk.KIOSK-A.evt.item.checkout" {
 		t.Errorf("event 1 subject: %s", sink.events[1].Subject)
 	}
-	if sink.events[3].Subject != "kiosk.KIOSK-A.event.item.consume" {
+	if sink.events[3].Subject != "kiosk.KIOSK-A.evt.item.consume" {
 		t.Errorf("event 3 subject: %s", sink.events[3].Subject)
 	}
 
@@ -241,11 +241,11 @@ func TestRepublishLedger_AdminCloseEmitsCheckoutAdminClose(t *testing.T) {
 	var adminCloseEv capturedEvent
 	for _, ev := range sink.events {
 		switch ev.Subject {
-		case "kiosk.KIOSK-A.event.transaction.complete":
+		case "kiosk.KIOSK-A.evt.transaction.complete":
 			completes++
-		case "kiosk.KIOSK-A.event.item.admin_close":
+		case "kiosk.KIOSK-A.evt.item.admin_close":
 			itemAdminCloses++
-		case "kiosk.KIOSK-A.event.checkout.admin_close":
+		case "kiosk.KIOSK-A.evt.checkout.admin_close":
 			adminCloses++
 			adminCloseEv = ev
 		}
