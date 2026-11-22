@@ -1,4 +1,4 @@
-module github.com/skeeeon/kiosk
+module github.com/stone-age-io/kiosk
 
 go 1.27
 

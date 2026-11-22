@@ -7,7 +7,7 @@ import (
 
 	"ganigeorgiev.com/pocketbase/pocketbase/core"
 
-	"github.com/skeeeon/kiosk/internal/ledger"
+	"github.com/stone-age-io/kiosk/internal/ledger"
 )
 
 // These tests exercise the controller's "currently out" view the way it is

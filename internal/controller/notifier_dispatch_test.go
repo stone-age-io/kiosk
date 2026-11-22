@@ -6,7 +6,7 @@ import (
 
 	"ganigeorgiev.com/pocketbase/dbx"
 
-	"github.com/skeeeon/kiosk/internal/notifications"
+	"github.com/stone-age-io/kiosk/internal/notifications"
 )
 
 // TestControllerNotifier_TemplatesSeeded sanity-checks that the kiosk

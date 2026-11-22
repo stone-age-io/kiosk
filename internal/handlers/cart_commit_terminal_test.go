@@ -10,11 +10,11 @@ import (
 	"ganigeorgiev.com/pocketbase/dbx"
 	"ganigeorgiev.com/pocketbase/pocketbase/core"
 
-	"github.com/skeeeon/kiosk/internal/cart"
-	"github.com/skeeeon/kiosk/internal/config"
-	"github.com/skeeeon/kiosk/internal/handlers"
-	"github.com/skeeeon/kiosk/internal/kioskctx"
-	"github.com/skeeeon/kiosk/internal/notifications"
+	"github.com/stone-age-io/kiosk/internal/cart"
+	"github.com/stone-age-io/kiosk/internal/config"
+	"github.com/stone-age-io/kiosk/internal/handlers"
+	"github.com/stone-age-io/kiosk/internal/kioskctx"
+	"github.com/stone-age-io/kiosk/internal/notifications"
 )
 
 // TestCartCommit_StampsRequestTerminalID covers the manual-flow seam: the cart

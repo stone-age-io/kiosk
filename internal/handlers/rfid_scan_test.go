@@ -9,11 +9,11 @@ import (
 	"ganigeorgiev.com/pocketbase/dbx"
 	"ganigeorgiev.com/pocketbase/pocketbase/core"
 
-	"github.com/skeeeon/kiosk/internal/cart"
-	"github.com/skeeeon/kiosk/internal/config"
-	"github.com/skeeeon/kiosk/internal/handlers"
-	"github.com/skeeeon/kiosk/internal/notifications"
-	"github.com/skeeeon/kiosk/internal/rfid"
+	"github.com/stone-age-io/kiosk/internal/cart"
+	"github.com/stone-age-io/kiosk/internal/config"
+	"github.com/stone-age-io/kiosk/internal/handlers"
+	"github.com/stone-age-io/kiosk/internal/notifications"
+	"github.com/stone-age-io/kiosk/internal/rfid"
 )
 
 // fakeReader is a test double for rfid.Reader. ReadFor returns the

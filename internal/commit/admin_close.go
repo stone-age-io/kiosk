@@ -8,10 +8,10 @@ import (
 	"ganigeorgiev.com/pocketbase/dbx"
 	"ganigeorgiev.com/pocketbase/pocketbase/core"
 
-	"github.com/skeeeon/kiosk/internal/dberr"
-	"github.com/skeeeon/kiosk/internal/events"
-	inststatus "github.com/skeeeon/kiosk/internal/instances/status"
-	"github.com/skeeeon/kiosk/internal/kioskctx"
+	"github.com/stone-age-io/kiosk/internal/dberr"
+	"github.com/stone-age-io/kiosk/internal/events"
+	inststatus "github.com/stone-age-io/kiosk/internal/instances/status"
+	"github.com/stone-age-io/kiosk/internal/kioskctx"
 )
 
 // ValidationError signals that the caller's AdminCloseInput is malformed —

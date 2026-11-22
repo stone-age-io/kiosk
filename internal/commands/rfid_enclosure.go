@@ -20,7 +20,7 @@ import (
 
 	"ganigeorgiev.com/pocketbase/dbx"
 
-	"github.com/skeeeon/kiosk/internal/cart"
+	"github.com/stone-age-io/kiosk/internal/cart"
 )
 
 // ReadTriggerBudget bounds the whole read.trigger command. It must sit below

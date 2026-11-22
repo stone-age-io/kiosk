@@ -7,9 +7,9 @@ import (
 	"ganigeorgiev.com/pocketbase/dbx"
 	"ganigeorgiev.com/pocketbase/pocketbase/core"
 
-	"github.com/skeeeon/kiosk/internal/cart"
-	"github.com/skeeeon/kiosk/internal/commit"
-	"github.com/skeeeon/kiosk/internal/kioskctx"
+	"github.com/stone-age-io/kiosk/internal/cart"
+	"github.com/stone-age-io/kiosk/internal/commit"
+	"github.com/stone-age-io/kiosk/internal/kioskctx"
 )
 
 // capturedEvent holds one (subject, payload) pair from a republish. The

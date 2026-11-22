@@ -13,9 +13,9 @@ import (
 
 	"ganigeorgiev.com/pocketbase/pocketbase/core"
 
-	"github.com/skeeeon/kiosk/internal/config"
-	"github.com/skeeeon/kiosk/internal/exports"
-	"github.com/skeeeon/kiosk/internal/notifications"
+	"github.com/stone-age-io/kiosk/internal/config"
+	"github.com/stone-age-io/kiosk/internal/exports"
+	"github.com/stone-age-io/kiosk/internal/notifications"
 )
 
 // Handlers groups the controller's HTTP endpoints. The set is deliberately

@@ -11,7 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/nats-io/nats.go"
 
-	"github.com/skeeeon/kiosk/internal/events"
+	"github.com/stone-age-io/kiosk/internal/events"
 )
 
 // commandTimeout mirrors the controller's own per-command budget. Local

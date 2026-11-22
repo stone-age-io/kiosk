@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/skeeeon/kiosk/internal/events"
-	"github.com/skeeeon/kiosk/internal/sightings"
+	"github.com/stone-age-io/kiosk/internal/events"
+	"github.com/stone-age-io/kiosk/internal/sightings"
 )
 
 // fakeLookup resolves a single known tag id to a fixed instance id.

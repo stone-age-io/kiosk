@@ -8,8 +8,8 @@ import (
 
 	"ganigeorgiev.com/pocketbase/pocketbase/core"
 
-	"github.com/skeeeon/kiosk/internal/csvimport"
-	"github.com/skeeeon/kiosk/internal/exports"
+	"github.com/stone-age-io/kiosk/internal/csvimport"
+	"github.com/stone-age-io/kiosk/internal/exports"
 )
 
 const maxCSVUploadBytes = 10 << 20 // 10 MB — enough for tens of thousands of items

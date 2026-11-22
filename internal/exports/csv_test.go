@@ -10,7 +10,7 @@ import (
 	"ganigeorgiev.com/pocketbase/pocketbase"
 	"ganigeorgiev.com/pocketbase/pocketbase/core"
 
-	_ "github.com/skeeeon/kiosk/migrations"
+	_ "github.com/stone-age-io/kiosk/migrations"
 )
 
 // TestCSVSafe pins the formula-injection neutralization: dangerous leading

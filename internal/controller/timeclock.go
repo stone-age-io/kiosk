@@ -10,9 +10,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/nats-io/nats.go"
 
-	"github.com/skeeeon/kiosk/internal/events"
-	"github.com/skeeeon/kiosk/internal/exports"
-	"github.com/skeeeon/kiosk/internal/timeclock"
+	"github.com/stone-age-io/kiosk/internal/events"
+	"github.com/stone-age-io/kiosk/internal/exports"
+	"github.com/stone-age-io/kiosk/internal/timeclock"
 )
 
 // Timeclock endpoints. Two families:

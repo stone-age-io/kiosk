@@ -3,7 +3,7 @@ package commands
 import (
 	"context"
 
-	"github.com/skeeeon/kiosk/internal/metrics"
+	"github.com/stone-age-io/kiosk/internal/metrics"
 )
 
 // handleMetricsSnapshot returns this kiosk's operational + activity snapshot.

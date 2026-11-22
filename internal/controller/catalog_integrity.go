@@ -10,7 +10,7 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/skeeeon/kiosk/internal/catalog"
+	"github.com/stone-age-io/kiosk/internal/catalog"
 )
 
 // CatalogIntegrityReport diffs the controller's catalog DB state against the

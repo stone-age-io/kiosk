@@ -36,25 +36,25 @@ import (
 	"ganigeorgiev.com/pocketbase/pocketbase/core"
 	"ganigeorgiev.com/pocketbase/pocketbase/plugins/migratecmd"
 
-	"github.com/skeeeon/kiosk/internal/authfix"
-	"github.com/skeeeon/kiosk/internal/cart"
-	"github.com/skeeeon/kiosk/internal/catalog"
-	"github.com/skeeeon/kiosk/internal/config"
-	"github.com/skeeeon/kiosk/internal/events"
-	"github.com/skeeeon/kiosk/internal/handlers"
-	"github.com/skeeeon/kiosk/internal/heartbeat"
-	"github.com/skeeeon/kiosk/internal/kioskctx"
-	"github.com/skeeeon/kiosk/internal/notifications"
-	"github.com/skeeeon/kiosk/internal/scheduler"
-	"github.com/skeeeon/kiosk/internal/timeclock"
-	"github.com/skeeeon/kiosk/internal/ui"
+	"github.com/stone-age-io/kiosk/internal/authfix"
+	"github.com/stone-age-io/kiosk/internal/cart"
+	"github.com/stone-age-io/kiosk/internal/catalog"
+	"github.com/stone-age-io/kiosk/internal/config"
+	"github.com/stone-age-io/kiosk/internal/events"
+	"github.com/stone-age-io/kiosk/internal/handlers"
+	"github.com/stone-age-io/kiosk/internal/heartbeat"
+	"github.com/stone-age-io/kiosk/internal/kioskctx"
+	"github.com/stone-age-io/kiosk/internal/notifications"
+	"github.com/stone-age-io/kiosk/internal/scheduler"
+	"github.com/stone-age-io/kiosk/internal/timeclock"
+	"github.com/stone-age-io/kiosk/internal/ui"
 
 	// Kiosk-side schema (incl. the time_punches ledger) registers via init().
 	// The timeclock-only migration package — imported by this binary alone —
 	// turns the users collection into a real worker-auth surface; regular
 	// kiosks and the controller never import it, so they never enable login.
-	_ "github.com/skeeeon/kiosk/migrations"
-	_ "github.com/skeeeon/kiosk/migrations/timeclock"
+	_ "github.com/stone-age-io/kiosk/migrations"
+	_ "github.com/stone-age-io/kiosk/migrations/timeclock"
 )
 
 // sendLogRetentionDays bounds the notification_send_log + dedupe tables. Same

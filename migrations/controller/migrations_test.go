@@ -9,7 +9,7 @@ import (
 	// Side-effect import: the kiosk migrations register via init() and
 	// the controller migrations build on top of them, so both sets must
 	// be in the global AppMigrations list before the runner fires.
-	_ "github.com/skeeeon/kiosk/migrations"
+	_ "github.com/stone-age-io/kiosk/migrations"
 )
 
 // TestControllerMigrationsApplyCleanly is the smoke test for the

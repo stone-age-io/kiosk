@@ -8,7 +8,7 @@ import (
 	"ganigeorgiev.com/pocketbase/dbx"
 	"ganigeorgiev.com/pocketbase/pocketbase/core"
 
-	"github.com/skeeeon/kiosk/internal/dberr"
+	"github.com/stone-age-io/kiosk/internal/dberr"
 )
 
 // Logf is the seeder's progress sink. Both subcommands pass log.Printf;

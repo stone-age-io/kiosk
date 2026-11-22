@@ -5,7 +5,7 @@ import (
 
 	"github.com/nats-io/nats.go/jetstream"
 
-	"github.com/skeeeon/kiosk/internal/dberr"
+	"github.com/stone-age-io/kiosk/internal/dberr"
 )
 
 // isNotFound / isUniqueViolation delegate to internal/dberr — the single home

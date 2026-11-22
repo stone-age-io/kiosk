@@ -7,9 +7,9 @@ import (
 
 	"ganigeorgiev.com/pocketbase/pocketbase/core"
 
-	"github.com/skeeeon/kiosk/internal/events"
-	"github.com/skeeeon/kiosk/internal/exports"
-	"github.com/skeeeon/kiosk/internal/timeclock"
+	"github.com/stone-age-io/kiosk/internal/events"
+	"github.com/stone-age-io/kiosk/internal/exports"
+	"github.com/stone-age-io/kiosk/internal/timeclock"
 )
 
 // Timeclock admin reports. Same conventions as reports.go: JSON for the SPA

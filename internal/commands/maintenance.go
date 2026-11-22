@@ -20,8 +20,8 @@ import (
 	"context"
 	"encoding/json"
 
-	"github.com/skeeeon/kiosk/internal/events"
-	"github.com/skeeeon/kiosk/internal/handlers"
+	"github.com/stone-age-io/kiosk/internal/events"
+	"github.com/stone-age-io/kiosk/internal/handlers"
 )
 
 // integrityRebuildRequest is the optional payload the controller sends. An

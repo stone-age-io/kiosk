@@ -8,7 +8,7 @@ import (
 	"ganigeorgiev.com/pocketbase/dbx"
 	"ganigeorgiev.com/pocketbase/pocketbase/core"
 
-	"github.com/skeeeon/kiosk/internal/handlers"
+	"github.com/stone-age-io/kiosk/internal/handlers"
 )
 
 // setThreshold is the call under test, wrapped so each case reads as one line.

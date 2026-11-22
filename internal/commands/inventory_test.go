@@ -10,7 +10,7 @@ import (
 	"ganigeorgiev.com/pocketbase/pocketbase/core"
 
 	// Register migrations so the runner picks them up.
-	_ "github.com/skeeeon/kiosk/migrations"
+	_ "github.com/stone-age-io/kiosk/migrations"
 )
 
 func setupApp(t *testing.T) *pocketbase.PocketBase {

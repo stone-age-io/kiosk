@@ -8,11 +8,11 @@ import (
 	"ganigeorgiev.com/pocketbase/dbx"
 	"ganigeorgiev.com/pocketbase/pocketbase/core"
 
-	"github.com/skeeeon/kiosk/internal/events"
-	"github.com/skeeeon/kiosk/internal/exports"
-	"github.com/skeeeon/kiosk/internal/kioskctx"
-	"github.com/skeeeon/kiosk/internal/scan"
-	"github.com/skeeeon/kiosk/internal/timeclock"
+	"github.com/stone-age-io/kiosk/internal/events"
+	"github.com/stone-age-io/kiosk/internal/exports"
+	"github.com/stone-age-io/kiosk/internal/kioskctx"
+	"github.com/stone-age-io/kiosk/internal/scan"
+	"github.com/stone-age-io/kiosk/internal/timeclock"
 )
 
 // Timeclock endpoints. Anonymous like the rest of /api/kiosk/* (the kiosk

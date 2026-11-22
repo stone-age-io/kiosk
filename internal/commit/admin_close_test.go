@@ -8,9 +8,9 @@ import (
 	"ganigeorgiev.com/pocketbase/dbx"
 	"ganigeorgiev.com/pocketbase/pocketbase/core"
 
-	"github.com/skeeeon/kiosk/internal/cart"
-	"github.com/skeeeon/kiosk/internal/commit"
-	"github.com/skeeeon/kiosk/internal/events"
+	"github.com/stone-age-io/kiosk/internal/cart"
+	"github.com/stone-age-io/kiosk/internal/commit"
+	"github.com/stone-age-io/kiosk/internal/events"
 )
 
 // ensureAdmin creates an admins record once for AdminClose tests and returns

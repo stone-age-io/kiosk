@@ -10,7 +10,7 @@ import (
 	"ganigeorgiev.com/pocketbase/pocketbase/core"
 	"github.com/nats-io/nats.go/jetstream"
 
-	"github.com/skeeeon/kiosk/internal/catalog"
+	"github.com/stone-age-io/kiosk/internal/catalog"
 )
 
 // CatalogPublisher fans controller-side changes out to the JetStream KV bucket

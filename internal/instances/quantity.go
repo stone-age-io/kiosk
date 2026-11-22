@@ -6,7 +6,7 @@ import (
 	"ganigeorgiev.com/pocketbase/dbx"
 	"ganigeorgiev.com/pocketbase/pocketbase/core"
 
-	"github.com/skeeeon/kiosk/internal/dberr"
+	"github.com/stone-age-io/kiosk/internal/dberr"
 )
 
 // quantity.go keeps items.quantity_on_hand in sync with the count of

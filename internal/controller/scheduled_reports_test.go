@@ -7,8 +7,8 @@ import (
 	"ganigeorgiev.com/pocketbase/dbx"
 	"ganigeorgiev.com/pocketbase/pocketbase/core"
 
-	"github.com/skeeeon/kiosk/internal/notifications"
-	"github.com/skeeeon/kiosk/internal/scheduler"
+	"github.com/stone-age-io/kiosk/internal/notifications"
+	"github.com/stone-age-io/kiosk/internal/scheduler"
 )
 
 // TestRunOpenCheckoutsDigest_ControllerSide drives the open-checkouts runner,

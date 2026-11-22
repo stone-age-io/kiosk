@@ -5,7 +5,7 @@ import (
 
 	"ganigeorgiev.com/pocketbase/pocketbase/core"
 
-	"github.com/skeeeon/kiosk/internal/ledger"
+	"github.com/stone-age-io/kiosk/internal/ledger"
 )
 
 // Snapshot enrichment. The kiosk's inventory.snapshot / instance.snapshot

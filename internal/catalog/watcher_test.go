@@ -7,7 +7,7 @@ import (
 	"ganigeorgiev.com/pocketbase/pocketbase"
 	"ganigeorgiev.com/pocketbase/pocketbase/core"
 
-	_ "github.com/skeeeon/kiosk/migrations"
+	_ "github.com/stone-age-io/kiosk/migrations"
 )
 
 // setupApp boots a fresh kiosk-shape PB (no controller migrations) — this

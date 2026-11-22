@@ -8,9 +8,9 @@ import (
 	"ganigeorgiev.com/pocketbase/pocketbase/core"
 	"github.com/nats-io/nats.go"
 
-	"github.com/skeeeon/kiosk/internal/events"
-	"github.com/skeeeon/kiosk/internal/ledger"
-	"github.com/skeeeon/kiosk/internal/notifications"
+	"github.com/stone-age-io/kiosk/internal/events"
+	"github.com/stone-age-io/kiosk/internal/ledger"
+	"github.com/stone-age-io/kiosk/internal/notifications"
 )
 
 // targetKiosks resolves the fan-out universe for a fleet read and splits it by

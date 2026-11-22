@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"strings"
 
-	"github.com/skeeeon/kiosk/internal/commit"
-	"github.com/skeeeon/kiosk/internal/events"
-	"github.com/skeeeon/kiosk/internal/kioskctx"
+	"github.com/stone-age-io/kiosk/internal/commit"
+	"github.com/stone-age-io/kiosk/internal/events"
+	"github.com/stone-age-io/kiosk/internal/kioskctx"
 )
 
 // checkoutCloseRequest is the JSON the controller sends. transaction_line_id

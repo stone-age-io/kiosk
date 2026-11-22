@@ -30,7 +30,7 @@ import (
 
 	"github.com/edgexfoundry/device-rfid-llrp-go/pkg/llrp"
 
-	"github.com/skeeeon/kiosk/internal/config"
+	"github.com/stone-age-io/kiosk/internal/config"
 )
 
 // EPC is a tag's Electronic Product Code as a hex string (no 0x prefix,

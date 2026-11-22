@@ -12,7 +12,7 @@ import (
 
 	"ganigeorgiev.com/pocketbase/pocketbase/core"
 
-	"github.com/skeeeon/kiosk/internal/cartevents"
+	"github.com/stone-age-io/kiosk/internal/cartevents"
 )
 
 // sseHeartbeatInterval keeps the connection warm through any proxy

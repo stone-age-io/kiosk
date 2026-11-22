@@ -10,7 +10,7 @@ import (
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 
-	"github.com/skeeeon/kiosk/internal/config"
+	"github.com/stone-age-io/kiosk/internal/config"
 )
 
 // Publisher is the interface SetPublisher accepts. The production

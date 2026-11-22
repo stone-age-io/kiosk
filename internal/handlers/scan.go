@@ -7,7 +7,7 @@ import (
 	"ganigeorgiev.com/pocketbase/dbx"
 	"ganigeorgiev.com/pocketbase/pocketbase/core"
 
-	"github.com/skeeeon/kiosk/internal/scan"
+	"github.com/stone-age-io/kiosk/internal/scan"
 )
 
 // Scan dispatches a raw barcode/QR value to user, item, or unknown via the

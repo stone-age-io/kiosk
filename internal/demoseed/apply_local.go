@@ -6,10 +6,10 @@ import (
 	"ganigeorgiev.com/pocketbase/dbx"
 	"ganigeorgiev.com/pocketbase/pocketbase/core"
 
-	"github.com/skeeeon/kiosk/internal/dberr"
-	"github.com/skeeeon/kiosk/internal/events"
-	"github.com/skeeeon/kiosk/internal/handlers"
-	"github.com/skeeeon/kiosk/internal/instances"
+	"github.com/stone-age-io/kiosk/internal/dberr"
+	"github.com/stone-age-io/kiosk/internal/events"
+	"github.com/stone-age-io/kiosk/internal/handlers"
+	"github.com/stone-age-io/kiosk/internal/instances"
 )
 
 // SeedReason is stamped on every audit row the appliers write, so an

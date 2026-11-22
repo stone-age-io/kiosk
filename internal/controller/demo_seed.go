@@ -22,9 +22,9 @@ import (
 	"github.com/nats-io/nats.go"
 	"github.com/spf13/cobra"
 
-	"github.com/skeeeon/kiosk/internal/config"
-	"github.com/skeeeon/kiosk/internal/demoseed"
-	"github.com/skeeeon/kiosk/internal/events"
+	"github.com/stone-age-io/kiosk/internal/config"
+	"github.com/stone-age-io/kiosk/internal/demoseed"
+	"github.com/stone-age-io/kiosk/internal/events"
 )
 
 // RegisterDemoSeedCommand wires `demo-seed` onto the controller's root

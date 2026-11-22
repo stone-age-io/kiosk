@@ -7,9 +7,9 @@ import (
 
 	"ganigeorgiev.com/pocketbase/pocketbase/core"
 
-	"github.com/skeeeon/kiosk/internal/events"
-	"github.com/skeeeon/kiosk/internal/kioskctx"
-	"github.com/skeeeon/kiosk/internal/ledger"
+	"github.com/stone-age-io/kiosk/internal/events"
+	"github.com/stone-age-io/kiosk/internal/kioskctx"
+	"github.com/stone-age-io/kiosk/internal/ledger"
 )
 
 // openKey groups expected open_checkouts by (item, instance, user). The

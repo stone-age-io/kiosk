@@ -10,9 +10,9 @@ import (
 	"ganigeorgiev.com/pocketbase/dbx"
 	"ganigeorgiev.com/pocketbase/pocketbase/core"
 
-	"github.com/skeeeon/kiosk/internal/dberr"
-	"github.com/skeeeon/kiosk/internal/events"
-	"github.com/skeeeon/kiosk/internal/handlers"
+	"github.com/stone-age-io/kiosk/internal/dberr"
+	"github.com/stone-age-io/kiosk/internal/events"
+	"github.com/stone-age-io/kiosk/internal/handlers"
 )
 
 // inventoryAdjustRequest is the payload the controller sends. command_id is

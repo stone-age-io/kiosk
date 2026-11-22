@@ -6,10 +6,10 @@ import (
 
 	"ganigeorgiev.com/pocketbase/pocketbase/core"
 
-	"github.com/skeeeon/kiosk/internal/cart"
-	"github.com/skeeeon/kiosk/internal/commit"
-	"github.com/skeeeon/kiosk/internal/kioskctx"
-	"github.com/skeeeon/kiosk/internal/reconcile"
+	"github.com/stone-age-io/kiosk/internal/cart"
+	"github.com/stone-age-io/kiosk/internal/commit"
+	"github.com/stone-age-io/kiosk/internal/kioskctx"
+	"github.com/stone-age-io/kiosk/internal/reconcile"
 )
 
 // WorkerEmail implements WorkerEmailProvider so the notifier's recipient

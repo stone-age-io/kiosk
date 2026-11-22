@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/skeeeon/kiosk/internal/timeclock"
+	"github.com/stone-age-io/kiosk/internal/timeclock"
 )
 
 func ts(t *testing.T, s string) time.Time {

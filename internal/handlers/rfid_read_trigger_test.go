@@ -8,12 +8,12 @@ import (
 
 	"ganigeorgiev.com/pocketbase/pocketbase/core"
 
-	"github.com/skeeeon/kiosk/internal/cart"
-	"github.com/skeeeon/kiosk/internal/cartevents"
-	"github.com/skeeeon/kiosk/internal/config"
-	"github.com/skeeeon/kiosk/internal/handlers"
-	"github.com/skeeeon/kiosk/internal/notifications"
-	"github.com/skeeeon/kiosk/internal/rfid"
+	"github.com/stone-age-io/kiosk/internal/cart"
+	"github.com/stone-age-io/kiosk/internal/cartevents"
+	"github.com/stone-age-io/kiosk/internal/config"
+	"github.com/stone-age-io/kiosk/internal/handlers"
+	"github.com/stone-age-io/kiosk/internal/notifications"
+	"github.com/stone-age-io/kiosk/internal/rfid"
 )
 
 // rfidDiffSeed sets up the enclosure_diff scenario: one worker, one

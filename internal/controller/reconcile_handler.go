@@ -7,9 +7,9 @@ import (
 
 	"ganigeorgiev.com/pocketbase/pocketbase/core"
 
-	"github.com/skeeeon/kiosk/internal/ledger"
-	"github.com/skeeeon/kiosk/internal/notifications"
-	"github.com/skeeeon/kiosk/internal/reconcile"
+	"github.com/stone-age-io/kiosk/internal/ledger"
+	"github.com/stone-age-io/kiosk/internal/notifications"
+	"github.com/stone-age-io/kiosk/internal/reconcile"
 )
 
 // Reconciliation is the controller's fleet-wide custody-vs-location report

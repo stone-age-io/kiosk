@@ -8,7 +8,7 @@ import (
 	"ganigeorgiev.com/pocketbase/dbx"
 	"ganigeorgiev.com/pocketbase/pocketbase/core"
 
-	"github.com/skeeeon/kiosk/internal/events"
+	"github.com/stone-age-io/kiosk/internal/events"
 )
 
 // seedEPCIndex inserts an instance_epc_index row so ProjectSighting can resolve.

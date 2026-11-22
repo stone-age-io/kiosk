@@ -17,8 +17,8 @@ import (
 	"encoding/json"
 	"strings"
 
-	"github.com/skeeeon/kiosk/internal/events"
-	"github.com/skeeeon/kiosk/internal/instances"
+	"github.com/stone-age-io/kiosk/internal/events"
+	"github.com/stone-age-io/kiosk/internal/instances"
 )
 
 // instanceCreateRequest is the payload the controller sends to create a

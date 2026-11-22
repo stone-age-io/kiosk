@@ -6,7 +6,7 @@ import (
 
 	"ganigeorgiev.com/pocketbase/dbx"
 
-	"github.com/skeeeon/kiosk/internal/events"
+	"github.com/stone-age-io/kiosk/internal/events"
 )
 
 // TestProjectInstanceLifecycle_ProjectsRow drives the projection path

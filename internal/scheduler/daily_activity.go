@@ -8,7 +8,7 @@ import (
 	"ganigeorgiev.com/pocketbase/dbx"
 	"ganigeorgiev.com/pocketbase/pocketbase/core"
 
-	"github.com/skeeeon/kiosk/internal/notifications"
+	"github.com/stone-age-io/kiosk/internal/notifications"
 )
 
 // dailyActivityWindowFor maps a schedule row's cadence to the lookback

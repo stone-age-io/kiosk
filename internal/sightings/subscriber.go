@@ -8,7 +8,7 @@ import (
 	"ganigeorgiev.com/pocketbase/pocketbase/core"
 	"github.com/nats-io/nats.go"
 
-	"github.com/skeeeon/kiosk/internal/events"
+	"github.com/stone-age-io/kiosk/internal/events"
 )
 
 // Subscribe wires a standalone node's OWN sighting subject to local ingest. The

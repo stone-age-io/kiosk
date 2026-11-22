@@ -9,8 +9,8 @@ import (
 	"ganigeorgiev.com/pocketbase/pocketbase/core"
 	"github.com/nats-io/nats.go"
 
-	"github.com/skeeeon/kiosk/internal/exports"
-	"github.com/skeeeon/kiosk/internal/notifications"
+	"github.com/stone-age-io/kiosk/internal/exports"
+	"github.com/stone-age-io/kiosk/internal/notifications"
 )
 
 // ReportOpenCheckouts returns the fleet (or single-kiosk) currently-out view

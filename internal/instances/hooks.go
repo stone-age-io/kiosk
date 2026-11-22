@@ -27,8 +27,8 @@ import (
 
 	"ganigeorgiev.com/pocketbase/pocketbase/core"
 
-	"github.com/skeeeon/kiosk/internal/events"
-	"github.com/skeeeon/kiosk/internal/kioskctx"
+	"github.com/stone-age-io/kiosk/internal/events"
+	"github.com/stone-age-io/kiosk/internal/kioskctx"
 )
 
 // publisher is the *Publisher / *Publish hook target. Decoupled so tests can

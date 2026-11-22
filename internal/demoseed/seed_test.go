@@ -8,12 +8,12 @@ import (
 	"ganigeorgiev.com/pocketbase/pocketbase"
 	"ganigeorgiev.com/pocketbase/pocketbase/core"
 
-	"github.com/skeeeon/kiosk/internal/demoseed"
-	"github.com/skeeeon/kiosk/internal/instances"
-	"github.com/skeeeon/kiosk/internal/kioskctx"
+	"github.com/stone-age-io/kiosk/internal/demoseed"
+	"github.com/stone-age-io/kiosk/internal/instances"
+	"github.com/stone-age-io/kiosk/internal/kioskctx"
 
 	// Register kiosk migrations via init() so the runner can apply them.
-	_ "github.com/skeeeon/kiosk/migrations"
+	_ "github.com/stone-age-io/kiosk/migrations"
 )
 
 // setupApp boots a fresh PB app in a temp dir with the kiosk migrations

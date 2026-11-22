@@ -26,7 +26,7 @@ import (
 
 	"ganigeorgiev.com/pocketbase/pocketbase/core"
 
-	"github.com/skeeeon/kiosk/internal/dberr"
+	"github.com/stone-age-io/kiosk/internal/dberr"
 )
 
 // ActionInsert / ActionUpdate / ActionError are the three terminal states

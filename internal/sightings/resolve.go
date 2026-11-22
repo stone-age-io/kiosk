@@ -6,7 +6,7 @@ import (
 
 	"ganigeorgiev.com/pocketbase/pocketbase/core"
 
-	"github.com/skeeeon/kiosk/internal/events"
+	"github.com/stone-age-io/kiosk/internal/events"
 )
 
 // EPCLookup resolves a raw tag id (RFID EPC, BLE beacon id later) to a local

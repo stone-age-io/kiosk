@@ -9,8 +9,8 @@ import (
 	"ganigeorgiev.com/pocketbase/dbx"
 	"ganigeorgiev.com/pocketbase/pocketbase/core"
 
-	"github.com/skeeeon/kiosk/internal/dberr"
-	"github.com/skeeeon/kiosk/internal/kioskctx"
+	"github.com/stone-age-io/kiosk/internal/dberr"
+	"github.com/stone-age-io/kiosk/internal/kioskctx"
 )
 
 // Typed errors the HTTP/command layers map to structured responses. The

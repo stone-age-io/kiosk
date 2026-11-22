@@ -5,7 +5,7 @@ import (
 
 	"github.com/nats-io/nats.go/jetstream"
 
-	"github.com/skeeeon/kiosk/internal/notifications"
+	"github.com/stone-age-io/kiosk/internal/notifications"
 )
 
 // Notification dispatch handlers for the aggregator's consume loop. Kept in

@@ -15,7 +15,7 @@ import (
 	"ganigeorgiev.com/pocketbase/dbx"
 	"ganigeorgiev.com/pocketbase/pocketbase/core"
 
-	"github.com/skeeeon/kiosk/internal/ledger"
+	"github.com/stone-age-io/kiosk/internal/ledger"
 )
 
 // WriteOpenCheckoutsCSV streams hydrated open-checkout rows as CSV. The DTOs

@@ -6,7 +6,7 @@ import (
 
 	"ganigeorgiev.com/pocketbase/pocketbase/core"
 
-	"github.com/skeeeon/kiosk/internal/rfid"
+	"github.com/stone-age-io/kiosk/internal/rfid"
 )
 
 // reloadObserved returns an instance's stamped last-observed fields.

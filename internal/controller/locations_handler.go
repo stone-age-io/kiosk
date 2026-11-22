@@ -6,8 +6,8 @@ import (
 
 	"ganigeorgiev.com/pocketbase/pocketbase/core"
 
-	"github.com/skeeeon/kiosk/internal/ledger"
-	"github.com/skeeeon/kiosk/internal/sightings"
+	"github.com/stone-age-io/kiosk/internal/ledger"
+	"github.com/stone-age-io/kiosk/internal/sightings"
 )
 
 // Locations is the controller's fleet-wide advisory location report

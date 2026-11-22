@@ -3,7 +3,7 @@ package commands
 import (
 	"context"
 
-	"github.com/skeeeon/kiosk/internal/ledger"
+	"github.com/stone-age-io/kiosk/internal/ledger"
 )
 
 // checkoutSnapshotReply is the checkout.snapshot reply shape. The rows are the

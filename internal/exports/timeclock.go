@@ -10,7 +10,7 @@ import (
 	"ganigeorgiev.com/pocketbase/dbx"
 	"ganigeorgiev.com/pocketbase/pocketbase/core"
 
-	"github.com/skeeeon/kiosk/internal/timeclock"
+	"github.com/stone-age-io/kiosk/internal/timeclock"
 )
 
 // Timeclock report plumbing shared by the kiosk handlers (local punches) and

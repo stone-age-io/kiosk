@@ -4,9 +4,9 @@ import (
 	"log"
 	"time"
 
-	"github.com/skeeeon/kiosk/internal/kioskctx"
-	"github.com/skeeeon/kiosk/internal/rfid"
-	"github.com/skeeeon/kiosk/internal/sightings"
+	"github.com/stone-age-io/kiosk/internal/kioskctx"
+	"github.com/stone-age-io/kiosk/internal/rfid"
+	"github.com/stone-age-io/kiosk/internal/sightings"
 )
 
 // stampObservedSighting records advisory last-observed location for every

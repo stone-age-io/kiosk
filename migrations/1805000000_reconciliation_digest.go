@@ -8,7 +8,7 @@ import (
 	"ganigeorgiev.com/pocketbase/pocketbase/core"
 	m "ganigeorgiev.com/pocketbase/pocketbase/migrations"
 
-	"github.com/skeeeon/kiosk/internal/notifications"
+	"github.com/stone-age-io/kiosk/internal/notifications"
 )
 
 // Extends scheduled_reports to host the reconciliation digest: appends

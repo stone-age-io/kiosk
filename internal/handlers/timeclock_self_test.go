@@ -13,18 +13,18 @@ import (
 	"ganigeorgiev.com/pocketbase/pocketbase/core"
 	"ganigeorgiev.com/pocketbase/pocketbase/tools/router"
 
-	"github.com/skeeeon/kiosk/internal/cart"
-	"github.com/skeeeon/kiosk/internal/config"
-	"github.com/skeeeon/kiosk/internal/handlers"
-	"github.com/skeeeon/kiosk/internal/kioskctx"
-	"github.com/skeeeon/kiosk/internal/notifications"
-	"github.com/skeeeon/kiosk/internal/timeclock"
+	"github.com/stone-age-io/kiosk/internal/cart"
+	"github.com/stone-age-io/kiosk/internal/config"
+	"github.com/stone-age-io/kiosk/internal/handlers"
+	"github.com/stone-age-io/kiosk/internal/kioskctx"
+	"github.com/stone-age-io/kiosk/internal/notifications"
+	"github.com/stone-age-io/kiosk/internal/timeclock"
 
 	// Apply the virtual-terminal-only worker-auth migration in this package's
 	// throwaway DBs so TestWorkerAuthMigration can assert it ran. Benign for
 	// the other handler tests (they set re.Auth directly and never mint a
 	// token, so the users AuthRule is irrelevant to them).
-	_ "github.com/skeeeon/kiosk/migrations/timeclock"
+	_ "github.com/stone-age-io/kiosk/migrations/timeclock"
 )
 
 // newSelfTCHandlers builds a Handlers with timeclock enabled — the minimum the

@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"log/slog"
 
-	"github.com/skeeeon/kiosk/internal/ledger"
-	"github.com/skeeeon/kiosk/internal/timeclock"
+	"github.com/stone-age-io/kiosk/internal/ledger"
+	"github.com/stone-age-io/kiosk/internal/timeclock"
 )
 
 // Open-checkouts state broadcast. Sibling of the punch_state writer

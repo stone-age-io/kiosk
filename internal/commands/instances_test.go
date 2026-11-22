@@ -8,7 +8,7 @@ import (
 	"ganigeorgiev.com/pocketbase/dbx"
 	"ganigeorgiev.com/pocketbase/pocketbase/core"
 
-	"github.com/skeeeon/kiosk/internal/instances"
+	"github.com/stone-age-io/kiosk/internal/instances"
 )
 
 // Tests exercise the dispatcher's instance.* handlers end-to-end against

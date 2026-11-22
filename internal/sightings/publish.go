@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/skeeeon/kiosk/internal/events"
+	"github.com/stone-age-io/kiosk/internal/events"
 )
 
 // PublishCustodyReads emits one raw sighting per observed tag onto the node's

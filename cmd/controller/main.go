@@ -22,20 +22,20 @@ import (
 	"ganigeorgiev.com/pocketbase/pocketbase/core"
 	"ganigeorgiev.com/pocketbase/pocketbase/plugins/migratecmd"
 
-	"github.com/skeeeon/kiosk/internal/authfix"
-	"github.com/skeeeon/kiosk/internal/config"
-	"github.com/skeeeon/kiosk/internal/controller"
-	"github.com/skeeeon/kiosk/internal/events"
-	"github.com/skeeeon/kiosk/internal/notifications"
-	"github.com/skeeeon/kiosk/internal/scheduler"
-	"github.com/skeeeon/kiosk/internal/ui"
+	"github.com/stone-age-io/kiosk/internal/authfix"
+	"github.com/stone-age-io/kiosk/internal/config"
+	"github.com/stone-age-io/kiosk/internal/controller"
+	"github.com/stone-age-io/kiosk/internal/events"
+	"github.com/stone-age-io/kiosk/internal/notifications"
+	"github.com/stone-age-io/kiosk/internal/scheduler"
+	"github.com/stone-age-io/kiosk/internal/ui"
 
 	// Kiosk migrations register via init(); we just need them in the
 	// build graph. The controller-only migrations live in a sibling
 	// package the kiosk binary doesn't import — that's the gating
 	// mechanism that keeps them off plain kiosks.
-	_ "github.com/skeeeon/kiosk/migrations"
-	_ "github.com/skeeeon/kiosk/migrations/controller"
+	_ "github.com/stone-age-io/kiosk/migrations"
+	_ "github.com/stone-age-io/kiosk/migrations/controller"
 )
 
 // sendLogRetentionDays bounds the notification_send_log + notification_dedupe

@@ -17,7 +17,7 @@ import (
 	"ganigeorgiev.com/pocketbase/dbx"
 	"ganigeorgiev.com/pocketbase/pocketbase/core"
 
-	"github.com/skeeeon/kiosk/internal/exports"
+	"github.com/stone-age-io/kiosk/internal/exports"
 )
 
 // Operational is the kiosk's process-level health. Gathered by the caller

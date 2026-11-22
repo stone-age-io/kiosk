@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/skeeeon/kiosk/internal/cart"
-	"github.com/skeeeon/kiosk/internal/commit"
-	"github.com/skeeeon/kiosk/internal/timeclock"
+	"github.com/stone-age-io/kiosk/internal/cart"
+	"github.com/stone-age-io/kiosk/internal/commit"
+	"github.com/stone-age-io/kiosk/internal/timeclock"
 )
 
 // The timeclock interlock: carts with checkout/consume lines require the

@@ -11,9 +11,9 @@ import (
 	"ganigeorgiev.com/pocketbase/pocketbase/core"
 	"github.com/spf13/cobra"
 
-	"github.com/skeeeon/kiosk/internal/config"
-	"github.com/skeeeon/kiosk/internal/csvimport"
-	"github.com/skeeeon/kiosk/internal/events"
+	"github.com/stone-age-io/kiosk/internal/config"
+	"github.com/stone-age-io/kiosk/internal/csvimport"
+	"github.com/stone-age-io/kiosk/internal/events"
 )
 
 // RegisterSeedCommand wires the `seed-catalog` subcommand onto the

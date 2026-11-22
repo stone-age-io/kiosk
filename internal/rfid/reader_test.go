@@ -8,7 +8,7 @@ import (
 
 	"github.com/edgexfoundry/device-rfid-llrp-go/pkg/llrp"
 
-	"github.com/skeeeon/kiosk/internal/config"
+	"github.com/stone-age-io/kiosk/internal/config"
 )
 
 // TestNew_RejectsMissingEndpoint catches a reader config that passed cross-

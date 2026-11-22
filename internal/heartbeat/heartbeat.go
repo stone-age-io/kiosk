@@ -18,7 +18,7 @@ import (
 
 	"github.com/nats-io/nats.go"
 
-	"github.com/skeeeon/kiosk/internal/events"
+	"github.com/stone-age-io/kiosk/internal/events"
 )
 
 // DefaultInterval is the publish cadence. 45s plus a 90s "online" window on

@@ -5,7 +5,7 @@ import (
 
 	"ganigeorgiev.com/pocketbase/pocketbase/core"
 
-	"github.com/skeeeon/kiosk/internal/catalog"
+	"github.com/stone-age-io/kiosk/internal/catalog"
 )
 
 // seedKiosk and seedKioskItem are defined in membership_test.go.

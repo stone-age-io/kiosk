@@ -10,7 +10,7 @@ import (
 	"ganigeorgiev.com/pocketbase/dbx"
 	"ganigeorgiev.com/pocketbase/pocketbase/core"
 
-	"github.com/skeeeon/kiosk/internal/kioskctx"
+	"github.com/stone-age-io/kiosk/internal/kioskctx"
 )
 
 // seedCheckoutScenario plants the rows needed for a checkout.close command

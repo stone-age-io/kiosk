@@ -3,8 +3,8 @@ package handlers_test
 import (
 	"testing"
 
-	"github.com/skeeeon/kiosk/internal/config"
-	"github.com/skeeeon/kiosk/internal/handlers"
+	"github.com/stone-age-io/kiosk/internal/config"
+	"github.com/stone-age-io/kiosk/internal/handlers"
 )
 
 // ReaderByID is the resolution the counter_scan ?reader= URL param relies on

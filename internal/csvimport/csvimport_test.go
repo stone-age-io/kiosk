@@ -11,7 +11,7 @@ import (
 
 	// Side-effect: register kiosk-side migrations including the groups
 	// collection that the users importer auto-resolves against.
-	_ "github.com/skeeeon/kiosk/migrations"
+	_ "github.com/stone-age-io/kiosk/migrations"
 )
 
 // setupApp boots a real PocketBase app per case via the migration runner,

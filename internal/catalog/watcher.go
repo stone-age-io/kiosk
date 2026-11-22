@@ -11,7 +11,7 @@ import (
 	"ganigeorgiev.com/pocketbase/pocketbase/core"
 	"github.com/nats-io/nats.go/jetstream"
 
-	"github.com/skeeeon/kiosk/internal/dberr"
+	"github.com/stone-age-io/kiosk/internal/dberr"
 )
 
 // Watcher subscribes to the catalog KV buckets and projects each update

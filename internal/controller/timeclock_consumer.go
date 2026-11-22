@@ -9,7 +9,7 @@ import (
 	"ganigeorgiev.com/pocketbase/pocketbase/core"
 	"github.com/nats-io/nats.go/jetstream"
 
-	"github.com/skeeeon/kiosk/internal/timeclock"
+	"github.com/stone-age-io/kiosk/internal/timeclock"
 )
 
 // Timeclock punch projection + punch_state KV broadcast. Sibling of the

@@ -7,7 +7,7 @@ import (
 	"ganigeorgiev.com/pocketbase/dbx"
 	"ganigeorgiev.com/pocketbase/pocketbase/core"
 
-	"github.com/skeeeon/kiosk/internal/timeclock"
+	"github.com/stone-age-io/kiosk/internal/timeclock"
 )
 
 func seedPunchUser(t *testing.T, app core.App, code, name string) string {

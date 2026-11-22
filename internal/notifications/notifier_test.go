@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/skeeeon/kiosk/internal/reconcile"
+	"github.com/stone-age-io/kiosk/internal/reconcile"
 )
 
 // TestDefaultsRenderAgainstReceiptContext is the regression test that

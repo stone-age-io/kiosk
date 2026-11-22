@@ -1,6 +1,6 @@
 package instances
 
-import "github.com/skeeeon/kiosk/internal/instances/status"
+import "github.com/stone-age-io/kiosk/internal/instances/status"
 
 // The lifecycle status vocabulary + the in-transaction status writer live in
 // the leaf sub-package internal/instances/status (so internal/commit can drive

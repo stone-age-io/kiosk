@@ -7,7 +7,7 @@ import (
 	"ganigeorgiev.com/pocketbase/pocketbase"
 	"ganigeorgiev.com/pocketbase/pocketbase/core"
 
-	"github.com/skeeeon/kiosk/internal/instances"
+	"github.com/stone-age-io/kiosk/internal/instances"
 )
 
 // newApp boots a fresh PB instance in a temp dir with quiet bootstrap.

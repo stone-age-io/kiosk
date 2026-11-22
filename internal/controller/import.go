@@ -7,7 +7,7 @@ import (
 
 	"ganigeorgiev.com/pocketbase/pocketbase/core"
 
-	"github.com/skeeeon/kiosk/internal/csvimport"
+	"github.com/stone-age-io/kiosk/internal/csvimport"
 )
 
 // maxCSVUploadBytes mirrors the kiosk-side cap. Tens of thousands of rows

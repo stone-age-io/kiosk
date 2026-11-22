@@ -3,8 +3,8 @@ package handlers
 import (
 	"sort"
 
-	"github.com/skeeeon/kiosk/internal/config"
-	"github.com/skeeeon/kiosk/internal/rfid"
+	"github.com/stone-age-io/kiosk/internal/config"
+	"github.com/stone-age-io/kiosk/internal/rfid"
 )
 
 // ReaderHandle bundles a constructed LLRP reader with the per-reader config
