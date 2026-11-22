@@ -1,0 +1,4 @@
+name: publish_kiosk_checkout
+capability: publish
+subject_suffix: evt.item.checkout
+description: "One line: a tool taken out."

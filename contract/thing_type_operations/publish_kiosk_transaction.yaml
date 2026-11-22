@@ -1,0 +1,4 @@
+name: publish_kiosk_transaction
+capability: publish
+subject_suffix: evt.transaction.complete
+description: "A committed transaction. The ledger's unit of record, and the only event that registers a kiosk in the fleet."

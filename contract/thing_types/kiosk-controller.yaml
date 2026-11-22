@@ -1,0 +1,10 @@
+code: kiosk-controller
+name: Kiosk Controller
+description: Central aggregator for the kiosk fleet. Projects every node's ledger, publishes the catalogue into KV, and drives admin commands at remote nodes. Single instance.
+subject_prefix: app.kiosk.{thing}
+metadata_schema:
+  type: object
+  properties:
+    version: {type: string, title: Build}
+    kiosks: {type: integer, title: Nodes managed}
+    deployed: {type: string, format: date, title: Deployed}

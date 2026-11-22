@@ -1,0 +1,4 @@
+name: publish_kiosk_lowstock
+capability: publish
+subject_suffix: evt.alert.lowstock
+description: "A SKU crossed its reorder threshold. The kiosk owns the detection because the kiosk owns the count."

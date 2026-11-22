@@ -1,0 +1,4 @@
+name: publish_kiosk_instance
+capability: publish
+subject_suffix: evt.instance.lifecycle
+description: "A serialized unit was created or changed status: in_service, maintenance, retired."

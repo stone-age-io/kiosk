@@ -1,0 +1,4 @@
+name: publish_kiosk_return
+capability: publish
+subject_suffix: evt.item.return
+description: "One line: a tool brought back."

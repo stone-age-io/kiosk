@@ -1,0 +1,4 @@
+name: publish_kiosk_inventory
+capability: publish
+subject_suffix: evt.inventory.adjust
+description: "A stock count changed by hand rather than by a transaction. Carries the adjustment id the controller dedupes on."

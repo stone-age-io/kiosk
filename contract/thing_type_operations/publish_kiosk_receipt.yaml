@@ -1,0 +1,4 @@
+name: publish_kiosk_receipt
+capability: publish
+subject_suffix: evt.receipt.transaction
+description: "Rendering context for a transaction receipt. The kiosk supplies the facts; the controller owns the template and the SMTP."

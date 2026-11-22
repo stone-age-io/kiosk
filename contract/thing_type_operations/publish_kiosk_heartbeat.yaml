@@ -1,0 +1,4 @@
+name: publish_kiosk_heartbeat
+capability: publish
+subject_suffix: heartbeat
+description: "45s liveness beat, outside the stream. Last-write-wins on purpose: durability here would hide the very signal it carries."

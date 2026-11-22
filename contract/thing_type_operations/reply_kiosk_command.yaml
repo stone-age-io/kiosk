@@ -1,0 +1,4 @@
+name: reply_kiosk_command
+capability: reply
+subject_suffix: cmd.>
+description: "Answer any command the controller sends: inventory, instances, checkouts, timeclock, RFID. Single attempt, 5s budget — a handler that cannot do the work must still reply, or the controller renders the kiosk as offline."

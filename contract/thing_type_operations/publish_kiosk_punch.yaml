@@ -1,0 +1,4 @@
+name: publish_kiosk_punch
+capability: publish
+subject_suffix: evt.timeclock.punch
+description: "An accepted clock-in or clock-out. Kiosks are the only writers of the punch ledger."

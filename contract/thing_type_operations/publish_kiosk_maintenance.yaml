@@ -1,0 +1,4 @@
+name: publish_kiosk_maintenance
+capability: publish
+subject_suffix: evt.alert.maintenance
+description: "A return routed one or more units into maintenance. Batched one per transaction."

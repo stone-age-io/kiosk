@@ -1,0 +1,13 @@
+code: timeclock-terminal
+name: Virtual Timeclock Terminal
+description: A punch-only station with no checkout surface. Workers authenticate from their own phones, so the punched identity comes from the session and never from the request body.
+subject_prefix: kiosk.{thing}
+operations:
+  - publish_kiosk_punch
+  - publish_kiosk_heartbeat
+metadata_schema:
+  type: object
+  properties:
+    port: {type: integer, title: HTTP port}
+    auth: {type: string, title: Worker sign-in, enum: [oauth2, password, both]}
+    installed: {type: string, format: date, title: Installed}

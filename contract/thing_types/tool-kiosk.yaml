@@ -1,0 +1,31 @@
+code: tool-kiosk
+name: Tool Crib Kiosk
+description: A self-service checkout node. Owns its own ledger and keeps transacting with the WAN down; the controller aggregates rather than authorizes.
+subject_prefix: kiosk.{thing}
+operations:
+  - publish_kiosk_transaction
+  - publish_kiosk_checkout
+  - publish_kiosk_return
+  - publish_kiosk_consume
+  - publish_kiosk_admin_close
+  - publish_kiosk_inventory
+  - publish_kiosk_instance
+  - publish_kiosk_punch
+  - publish_kiosk_receipt
+  - publish_kiosk_lowstock
+  - publish_kiosk_maintenance
+  - publish_kiosk_integrity
+  - publish_kiosk_rfid_read
+  - publish_kiosk_heartbeat
+  - reply_kiosk_command
+  - subscribe_kiosk_sighting
+metadata_schema:
+  type: object
+  properties:
+    model: {type: string, title: Hardware model}
+    os: {type: string, title: Operating system}
+    port: {type: integer, title: HTTP port}
+    scanner: {type: string, title: Barcode scanner, enum: [usb-hid, none]}
+    rfid_mode: {type: string, title: RFID, enum: [counter_scan, enclosure_diff, mixed, none]}
+    enclosures: {type: integer, title: Cabinets driven}
+    installed: {type: string, format: date, title: Installed}

@@ -1,0 +1,4 @@
+name: publish_kiosk_integrity
+capability: publish
+subject_suffix: evt.integrity.rebuild
+description: "An operator rebuilt the open-checkouts view from the ledger. Rare, destructive, and worth auditing."

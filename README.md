@@ -359,6 +359,14 @@ to return each to, and lets them acknowledge ("clock out anyway") to proceed.
 It's eventually consistent and fail-open — a stale or unreachable replica
 allows the punch rather than stranding the worker.
 
+## Onboarding an organization
+
+[`contract/`](contract/) holds what an organization needs on the platform: the
+Thing Types for kiosk nodes, timeclock terminals and the controller, their
+operations, and a NATS role for each. As an owner or admin of the
+organization, run `stone apply --template contract/`. It is safe to re-run,
+and running it again moves an organization to a newer contract.
+
 ## Documentation
 
 The repo's deeper documentation lives under [`docs/`](docs/):

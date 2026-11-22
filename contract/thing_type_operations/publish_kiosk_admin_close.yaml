@@ -1,0 +1,4 @@
+name: publish_kiosk_admin_close
+capability: publish
+subject_suffix: evt.checkout.admin_close
+description: "An admin wrote off an open checkout as lost or damaged. One per row closed."

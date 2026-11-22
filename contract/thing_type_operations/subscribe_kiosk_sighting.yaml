@@ -1,0 +1,4 @@
+name: subscribe_kiosk_sighting
+capability: subscribe
+subject_suffix: sighting.raw
+description: "Advisory tag sightings from an off-platform gateway. Raw: it carries a tag id, never a resolved unit, and the subscriber resolves it."

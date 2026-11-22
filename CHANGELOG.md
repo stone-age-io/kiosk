@@ -41,6 +41,11 @@ and anything else on `kiosk.>` (rule-router rules, NATS permissions) together.
 
 ### Added
 
+- **`contract/`**: the Thing Types, operations and NATS roles an organization
+  needs, as a `stone` template. Onboard one with
+  `stone apply --template contract/` (stone-cli, unreleased). The roles are
+  `kiosk-node`, `kiosk-timeclock` and `kiosk-controller`; only the
+  controller's writes a bucket.
 - **`GET /api/ready`** on the node, the timeclock terminal and the
   controller: the platform's readiness contract. NATS warns on a node or
   terminal, which keep working without it, and fails on the controller.

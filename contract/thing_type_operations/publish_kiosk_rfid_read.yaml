@@ -1,0 +1,4 @@
+name: publish_kiosk_rfid_read
+capability: publish
+subject_suffix: evt.scan.rfid.observed
+description: "Every EPC seen in one RFID read window. Observability only — nothing projects it today."

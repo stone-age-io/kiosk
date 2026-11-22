@@ -1,0 +1,4 @@
+name: publish_kiosk_consume
+capability: publish
+subject_suffix: evt.item.consume
+description: "One line: a consumable drawn down. Never becomes an open checkout."
