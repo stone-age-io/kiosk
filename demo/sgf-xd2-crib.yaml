@@ -1,0 +1,55 @@
+# Northwind demo — the managed SGF-XD2-CRIB node. DEMO TOOLING: do not copy to an install.
+#
+#   KIOSK_CONFIG=demo/sgf-xd2-crib.yaml ./kiosk-app serve --dir pb_data_sgf-xd2-crib
+#
+# Managed by the controller: the catalogue arrives over JetStream KV, and
+# `kiosk-controller demo-seed --remote` installs this node's quantities and
+# units over the command bus. The runbook in demo/rules/README.md has the
+# order. Bound to 127.0.0.1 on purpose: /api/kiosk/* is anonymous, so the box
+# is the trust boundary, and the rule-router driver must run on this host.
+
+kiosk:
+  code: "SGF-XD2-CRIB"
+  location_code: "SGF-XD2"
+
+server:
+  port: 8103
+  bind: "127.0.0.1"
+
+session:
+  idle_timeout: "5m"
+  cart_grace_period: "30s"
+
+returns:
+  allow_cross_user: true
+  allow_uncorrelated: true
+
+nats:
+  enabled: true
+  url: "nats://localhost:4222"
+
+controller:
+  enabled: true
+
+# Both interlocks off, so the driver's random punches land. Turn
+# block_clock_out_with_open_checkouts on deliberately to show a worker with a
+# tool out at one site being refused a clock-out at another.
+timeclock:
+  enabled: true
+  require_clock_in_for_checkout: false
+  block_clock_out_with_open_checkouts: false
+
+# One cabinet on the mock RFID reader (see kc-dc1-crib.yaml).
+rfid:
+  enabled: true
+  allow_mock: true
+  read_window: "1s"
+  readers:
+    cabinet-a:
+      mode: "enclosure_diff"
+      enclosure_id: "A"
+      tag_file: "demo/tags/sgf-xd2-crib-a.txt"
+
+branding:
+  logo_path: "./branding/logo.svg"
+  tagline: "Northwind Traders — Springfield Crib"

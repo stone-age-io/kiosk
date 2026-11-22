@@ -1,0 +1,42 @@
+# rule-router config for the Northwind kiosk driver. DEMO TOOLING.
+#
+#   DEMO_CRON="*/3 * * * * *"  rule-router --config demo/rule-router.yaml --rules demo/rules
+#
+# All three features, each for a reason:
+#   scheduler  the cron that starts each cart and each punch
+#   router     the NATS-triggered hops of the cart chain (core subscriptions)
+#   gateway    attaches the HTTP executor to those NATS-triggered rules.
+#              Without it the follow-up hops log a warning and do nothing,
+#              while the cron hop keeps working, so the demo half-runs.
+#              It also opens an inbound listener, bound to loopback below.
+features:
+  router: true
+  gateway: true
+  scheduler: true
+
+http:
+  server:
+    # Nothing calls this. The gateway opens it anyway; keep it on loopback and
+    # off the kiosks' ports (8091-8103).
+    address: "127.0.0.1:8110"
+  client:
+    timeout: 10s
+
+nats:
+  urls:
+    - nats://localhost:4222
+  publish:
+    # core, not jetstream: no stream covers demo.>, and a JetStream publish
+    # there waits for an ack that never comes. publishResponse has no
+    # per-action mode, so this is set globally.
+    mode: core
+
+logging:
+  level: info
+  encoding: console
+  outputPath: stdout
+
+metrics:
+  enabled: true
+  address: "127.0.0.1:2117"
+  path: /metrics

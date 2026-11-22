@@ -1,0 +1,36 @@
+# Northwind demo — the virtual timeclock terminal at KC-OFFICE. DEMO TOOLING.
+#
+#   KIOSK_CONFIG=demo/timeclock.yaml ./kiosk-timeclock serve
+#
+# Office staff punch from their phones here. The driver does not punch at this
+# terminal: punches are driven at the kiosks (docs/demo-plan.md, "What is
+# deliberately not seeded, and not simulated").
+
+kiosk:
+  code: "KC-OFFICE-TC"
+  location_code: "KC-OFFICE"
+
+server:
+  port: 8092
+  bind: "127.0.0.1"
+
+session:
+  idle_timeout: "5m"
+  cart_grace_period: "30s"
+
+nats:
+  enabled: true
+  url: "nats://localhost:4222"
+
+controller:
+  enabled: true
+
+timeclock:
+  enabled: true
+  virtual: true
+  require_clock_in_for_checkout: false
+  block_clock_out_with_open_checkouts: false
+
+branding:
+  logo_path: "./branding/logo.svg"
+  tagline: "Northwind Traders — Time Clock"

@@ -1,0 +1,6 @@
+# KC-DC1-CRIB cabinet B: the tags a mock reader reports present.
+# Delete a line to take that unit out, then trigger a read.
+# Reset with: git checkout demo/tags
+e28011602e4e503c21b3dbd6  # PT-2040-0001 Rotary Hammer
+e280116020be7e792e5afc8f  # PT-2040-0002 Rotary Hammer
+e2801160f688da1077486be3  # PT-2050-0001 Heat Gun

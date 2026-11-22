@@ -13,8 +13,8 @@
 #
 # The estate this node belongs to is defined in internal/demoseed/data.go,
 # and docs/demo-plan.md explains why it is shaped the way it is. The
-# managed three-kiosk configs and the rule-router files that drive live
-# traffic arrive with Phase 5.
+# managed three-kiosk configs and the rule-router rules that drive live
+# traffic are beside this file; demo/rules/README.md is the runbook.
 #
 # DEMO TOOLING. The admin password here is well-known on purpose. Do not
 # copy this file to an install.
@@ -59,9 +59,9 @@ timeclock:
 
 # Off. KC-DC1-CRIB's two cabinets (A and B) are real in the fixture — the
 # serialized units carry their enclosure assignment and their tags — but
-# reading them needs either an LLRP reader on the network or the mock
-# reader from Phase 4. Until then the units check out at the counter like
-# any other serialized tool.
+# a cabinet read starts with NATS commands, and this node has NATS off. The
+# managed demo/kc-dc1-crib.yaml runs both cabinets on the mock reader. Here
+# the units check out at the counter like any other serialized tool.
 rfid:
   enabled: false
   readers: {}

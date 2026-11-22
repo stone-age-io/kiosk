@@ -1,12 +1,13 @@
 # Northwind demo — plan
 
-Status: **phases 1–3 and 6 landed; 4–5 not started.** Living doc; update as phases land.
+Status: **all six phases landed.** The runbook is `demo/rules/README.md`.
 
 The fixture and both appliers are in `internal/demoseed`, the two `demo-seed`
 subcommands are registered on their binaries, `demo/standalone.yaml` makes the
 standalone demo runnable today, and the estate now exists as Things in the Stone
-Age platform's own demo seed with the NATS roles to match. What is still ahead:
-the mock RFID reader, and the rule-router driver with its per-kiosk configs.
+Age platform's own demo seed with the NATS roles to match. The mock RFID reader
+and the rule-router driver landed with their per-kiosk configs; Phases 4 and 5
+below each end with what building them changed.
 
 The repo has no demo story. This plans one: a runnable **Northwind Traders**
 estate — three kiosks, a virtual timeclock terminal and a central controller —
@@ -469,7 +470,7 @@ Two gotchas specific to this binary:
 
 ---
 
-## Phase 4 — the mock RFID reader
+## Phase 4 — the mock RFID reader — **landed**
 
 `read.trigger` asks a physical reader, whether it arrives over HTTP or NATS. So the
 enclosure_diff flow — the headline story — cannot be demonstrated without hardware
@@ -525,9 +526,23 @@ opt-in (`rfid.allow_mock: true`, or a build tag). A reader that reports inventor
 from a text file is not something a production config should be able to acquire by
 typo.
 
+### What building it changed
+
+- **A `tag_file`, not `mode: "mock"`.** `mode` is the workflow (`counter_scan` or
+  `enclosure_diff`), so a reader whose mode was `mock` could not run the
+  enclosure_diff flow it exists to show. A reader with a `tag_file` is the mock, and
+  `mode` stays the workflow. The opt-in is `rfid.allow_mock: true`, as planned.
+- **The tag files are committed, not written by `demo-seed`.** A managed kiosk never
+  runs `kiosk demo-seed`: the controller installs its units over the bus. The EPCs
+  are derived from the unit codes, so `demo/tags/` is a pure function of the fixture,
+  and `TestDemoTagFilesMatchTheFixture` keeps it so (`UPDATE_TAGS=1` rewrites it).
+  `git checkout demo/tags` resets every cabinet after a demo.
+- **A missing tag file is an error, not an empty read.** An empty read would propose
+  checking out every unit in the cabinet.
+
 ---
 
-## Phase 5 — `demo/rules/`
+## Phase 5 — `demo/rules/` — **landed**
 
 ### The chain
 
@@ -681,6 +696,21 @@ should see in the first minute" table. Three kiosks × three rules plus punches 
 small file — if it starts growing, that is the signal to re-read the pool
 arithmetic rather than to add rules.
 
+### What building it changed
+
+- **One folder per kiosk** (`demo/rules/<node>/rules.yaml`). rule-router's `--rules`
+  takes a directory and walks it, so the fleet loads `demo/rules` and the standalone
+  demo loads `demo/rules/kc-dc1-crib`. No second copy, as the warm-up section wanted.
+- **The router feature is on too.** NATS-triggered hops with `mode: core` are served
+  by the router; the gateway only attaches the HTTP executor to them.
+- **Punches pick a direction at random,** and the kiosk refuses the ones that do not
+  fit (`409`, already in or not in). Stimulus, not outcome. Both clock-out and
+  clock-in interlocks are off in the fleet configs, so the timesheets fill.
+- **Item pools are the fixture's quantity-tracked SKUs and consumables.** Serialized
+  units move through the cabinets, by a presenter.
+- **Live run:** 72 completed transactions across the three kiosks in 75 seconds at
+  `*/3`, and the cabinet beat proposing exactly the unit whose line was deleted.
+
 ---
 
 ## Phase 6 — Northwind on the platform — **LANDED**
@@ -763,52 +793,10 @@ this document** — which is what the mirror tests now enforce.
 
 ## Runbook
 
-Each step is where it is for a reason; the reasons are above.
-
-```bash
-# 0. NATS. The platform's embedded server in operator mode, or a plain nats-server.
-
-# 1. Controller: schema, then the catalogue. The seed ensures the stream and the
-#    KV buckets itself, so it does not matter that the controller is not serving.
-./kiosk-controller demo-seed --confirm   # applies its own migrations first
-
-# 2. Kiosks serve. They come up managed, watch `<code>.>` on catalog_items, and
-#    project their own slice of the catalogue locally.
-KIOSK_CONFIG=demo/kc-dc1-crib.yaml  ./kiosk-app
-KIOSK_CONFIG=demo/kc-dc1-dock.yaml  ./kiosk-app
-KIOSK_CONFIG=demo/sgf-xd2-crib.yaml ./kiosk-app
-
-# 3. Controller: provision every kind of kiosk-local state over the command bus.
-#    Polls inventory.snapshot per kiosk until the catalogue has landed, then
-#    fires inventory.adjust, inventory.set_threshold and instance.create.
-#    Read-then-write, so a second run reports everything as already present.
-#    This is also the demo beat worth showing.
-./kiosk-controller demo-seed --remote --confirm
-
-# 4. Controller and timeclock terminal serve. The controller's durable consumer
-#    starts at the beginning of the stream, so it picks up every audit event the
-#    seed produced in step 3 — which is what EnsureStream in step 1 bought.
-./kiosk-controller serve
-KIOSK_CONFIG=demo/timeclock.yaml ./kiosk-timeclock
-
-# 5. Warm up, then go ambient. Same rules, different cadence.
-DEMO_CRON="*/3 * * * * *"  rule-router --config demo/rule-router.yaml --rules demo/rules
-# ...ctrl-C after ~10 minutes...
-DEMO_CRON="*/45 * * * * *" rule-router --config demo/rule-router.yaml --rules demo/rules
-```
-
-**Standalone variant** — one kiosk, no controller, no NATS, no fleet. This part
-works today:
-
-```bash
-KIOSK_CONFIG=demo/standalone.yaml ./kiosk-app demo-seed --confirm
-KIOSK_CONFIG=demo/standalone.yaml ./kiosk-app
-# then http://127.0.0.1:8101 — scan nw-marco, then HT-1010.
-# admin at /admin/login: admin@northwind.example / northwind-demo
-DEMO_CRON="*/20 * * * * *" rule-router --config demo/rule-router.yaml --rules demo/rules/standalone
-```
-
-`demo-seed` applies the migrations itself, so there is no separate `migrate up`.
+The runbook is [`demo/rules/README.md`](../demo/rules/README.md): the fleet, the
+cabinet beat, the standalone kiosk and the known noise. It replaced the draft that
+stood here, which predated the per-node data directories and the per-kiosk rule
+folders.
 
 ---
 

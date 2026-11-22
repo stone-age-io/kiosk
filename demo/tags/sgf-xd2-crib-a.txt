@@ -1,0 +1,6 @@
+# SGF-XD2-CRIB cabinet A: the tags a mock reader reports present.
+# Delete a line to take that unit out, then trigger a read.
+# Reset with: git checkout demo/tags
+e280116014fef6257a77f27b  # PT-2010-1001 Impact Driver 18V
+e280116031ffc6c8bd8b60eb  # PT-2010-1002 Impact Driver 18V
+e280116024e631273f53d436  # PT-2020-1001 Digital Torque Wrench

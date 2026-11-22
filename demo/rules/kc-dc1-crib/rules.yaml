@@ -1,0 +1,90 @@
+# =============================================================================
+# Northwind — KC-DC1-CRIB (Kansas City tool crib). DEMO TOOLING.
+# =============================================================================
+# rule-router rules that keep KC-DC1-CRIB busy: a worker walks up, scans one thing,
+# and confirms, three HTTP calls chained through NATS. Plus a punch.
+#
+# THE RULES SUPPLY STIMULUS, NEVER OUTCOMES. Nothing here names an action. The
+# kiosk decides: `consume` for a consumable, `return` for a tool this worker
+# already has out, `checkout` otherwise. The pool below is sized so that
+# settles at about half of it held per worker (docs/demo-plan.md, "The
+# catalogue is sized for the loop to close"). Widen the pool for more tools
+# out; narrow it for fewer. Do not add a return sweep.
+#
+# PREREQUISITES: the runbook in demo/rules/README.md. This node must be
+# serving on 127.0.0.1:8101, and rule-router must run on the same host with
+# demo/rule-router.yaml (all three features on, publish mode core).
+#
+# CADENCE: every cron is "${DEMO_CRON}", set at launch. Six fields, so
+# "*/3 * * * * *" is every three seconds. Read the field count.
+#
+# TRAPS, each of which fails silently:
+#   - The NATS-triggered hops need features.gateway, or they log and skip.
+#   - {@random.choice(...)} arguments cannot hold a comma or a space.
+#   - A string template in a JSON payload must be quoted; a number must not.
+
+# -----------------------------------------------------------------------------
+# THE CRIB — hand tools and materials handling, mostly checked out and back
+# -----------------------------------------------------------------------------
+
+# 1. A worker walks up and badges in. Cron picks who; the kiosk does the rest.
+- trigger:
+    schedule:
+      cron: "${DEMO_CRON}"
+      timezone: "America/Chicago"
+  action:
+    http:
+      url: "http://127.0.0.1:8101/api/kiosk/cart/start"
+      method: POST
+      headers:
+        Content-Type: "application/json"
+      payload: '{"user_code":"{@random.choice(nw-elena,nw-marco,nw-raj)}"}'
+      publishResponse:
+        subject: "demo.KC-DC1-CRIB.cart.started"
+
+# 2. They scan one thing. The start response carries the cart as {cart.id}.
+- trigger:
+    nats:
+      subject: "demo.KC-DC1-CRIB.cart.started"
+      mode: core
+  action:
+    http:
+      url: "http://127.0.0.1:8101/api/kiosk/cart/add"
+      method: POST
+      headers:
+        Content-Type: "application/json"
+      payload: '{"cart_id":"{cart.id}","item_code":"{@random.choice(HT-1010,HT-1020,HT-1030,HT-1040,HT-1050,MH-5010,MH-5020,CS-4010,CS-4040)}"}'
+      publishResponse:
+        subject: "demo.KC-DC1-CRIB.cart.lined"
+
+# 3. They confirm. The add response carries the cart again.
+- trigger:
+    nats:
+      subject: "demo.KC-DC1-CRIB.cart.lined"
+      mode: core
+  action:
+    http:
+      url: "http://127.0.0.1:8101/api/kiosk/cart/commit"
+      method: POST
+      headers:
+        Content-Type: "application/json"
+      payload: '{"cart_id":"{cart.id}","terminal_id":"counter-1"}'
+
+# -----------------------------------------------------------------------------
+# THE TIMECLOCK — warehouse punches at the crib
+# -----------------------------------------------------------------------------
+
+# A punch, in or out at random. The kiosk refuses one that does not fit the
+# worker's state (in when already in), which is its answer, not a failure of
+# the demo; the rest fill the timesheet.
+- trigger:
+    schedule:
+      cron: "${DEMO_CRON}"
+      timezone: "America/Chicago"
+  action:
+    http:
+      url: "http://127.0.0.1:8101/api/kiosk/timeclock/punch"
+      method: POST
+      headers:
+        Content-Type: "application/json"
+      payload: '{"user_code":"{@random.choice(nw-elena,nw-marco,nw-raj)}","direction":"{@random.choice(in,out)}"}'

@@ -34,3 +34,5 @@
 /.claude/
 # goreleaser output
 /dist/
+# One data dir per demo node (demo/*.yaml)
+/pb_data_*/

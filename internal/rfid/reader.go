@@ -114,6 +114,11 @@ const (
 // only for static config problems the config package's own validation should
 // have already caught; in practice this is a defense-in-depth check.
 func New(cfg config.RFIDReaderConfig) (Reader, error) {
+	// A tag_file makes the demo's mock reader (file_reader.go). Validation has
+	// already required rfid.allow_mock for it.
+	if cfg.TagFile != "" {
+		return newFileReader(cfg.TagFile), nil
+	}
 	if cfg.Host == "" || cfg.Port == 0 {
 		return nil, errors.New("rfid: reader host/port not configured")
 	}

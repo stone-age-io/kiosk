@@ -9,6 +9,18 @@ History before this file is in `git log`.
 
 ## [Unreleased]
 
+### Added
+
+- **The Northwind demo runs itself.** `demo/rules/` holds rule-router rules that
+  drive the three kiosks (start a cart, scan, confirm) and punch workers in and
+  out, with configs for every node in `demo/`. The kiosk decides each action.
+  `demo/rules/README.md` is the runbook. This is demo tooling.
+- **A mock RFID reader** for the demo: a reader with `tag_file` reports the
+  EPCs the file lists, so taking a tool out of a cabinet is deleting a line.
+  It runs the real `enclosure_diff` flow. It needs `rfid.allow_mock: true`;
+  without it a `tag_file` is a config error. `demo/tags/` holds the cabinets'
+  files, generated from the demo fixture.
+
 ## [0.1.1] - 2026-11-22
 
 Release binaries. Nothing else changed since v0.1.0.

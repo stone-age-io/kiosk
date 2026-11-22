@@ -222,6 +222,12 @@ type RFIDConfig struct {
 	Enabled    bool                        `yaml:"enabled"`
 	ReadWindow Duration                    `yaml:"read_window"`
 	Readers    map[string]RFIDReaderConfig `yaml:"readers"`
+
+	// AllowMock permits a reader with a tag_file: the demo's mock reader,
+	// which reports whatever EPCs a text file lists. DEMO TOOLING. Without
+	// this opt-in a tag_file is a config error, so a production config cannot
+	// acquire a reader that invents inventory by a typo.
+	AllowMock bool `yaml:"allow_mock"`
 }
 
 // SoleReaderMode returns the mode of the single configured reader, or "" when
@@ -265,6 +271,12 @@ type RFIDReaderConfig struct {
 	Host        string `yaml:"host"`
 	Port        int    `yaml:"port"`
 	EnclosureID string `yaml:"enclosure_id"` // required when mode=enclosure_diff
+
+	// TagFile makes this a mock reader for the demo: each read returns the
+	// EPCs listed in the file, one per line, and host/port are not used.
+	// Needs rfid.allow_mock. Mode still decides the workflow, so a mock
+	// cabinet runs the real enclosure_diff flow.
+	TagFile string `yaml:"tag_file"`
 
 	// Zone is an optional coarse location label for this reader. When set, a
 	// custody read at this reader also stamps every observed unit's advisory
@@ -671,10 +683,17 @@ func validateRFID(r *RFIDConfig) error {
 			return fmt.Errorf("rfid.readers[%q].mode must be %q or %q (got %q)",
 				id, RFIDModeCounterScan, RFIDModeEnclosureDiff, rd.Mode)
 		}
-		if rd.Host == "" {
+		switch {
+		case rd.TagFile != "":
+			if !r.AllowMock {
+				return fmt.Errorf("rfid.readers[%q].tag_file makes a mock reader that reports whatever the file lists; set rfid.allow_mock: true to allow it (demo only)", id)
+			}
+			if rd.Host != "" || rd.Port != 0 {
+				return fmt.Errorf("rfid.readers[%q] has both tag_file and host/port; a reader is either the mock or an LLRP reader", id)
+			}
+		case rd.Host == "":
 			return fmt.Errorf("rfid.readers[%q].host is required", id)
-		}
-		if rd.Port == 0 {
+		case rd.Port == 0:
 			return fmt.Errorf("rfid.readers[%q].port is required", id)
 		}
 		if rd.Mode == RFIDModeEnclosureDiff {

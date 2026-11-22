@@ -1,0 +1,8 @@
+# KC-DC1-CRIB cabinet A: the tags a mock reader reports present.
+# Delete a line to take that unit out, then trigger a read.
+# Reset with: git checkout demo/tags
+e280116017549c6ce37724ca  # PT-2010-0001 Impact Driver 18V
+e2801160c7b1c005f7799f8b  # PT-2010-0002 Impact Driver 18V
+e2801160eba4085e6d123340  # PT-2020-0001 Digital Torque Wrench
+e2801160e2debbaa62e7acf7  # PT-2020-0002 Digital Torque Wrench
+e2801160eef0dffc8325b889  # PT-2030-0001 Reciprocating Saw

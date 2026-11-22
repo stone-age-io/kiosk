@@ -201,6 +201,48 @@ func TestValidateRFID(t *testing.T) {
 			},
 			wantErr: "tx_power_dbm must be > 0",
 		},
+		{
+			name: "mock reader — tag_file with allow_mock, no host/port — ok",
+			in: RFIDConfig{
+				Enabled:   true,
+				AllowMock: true,
+				Readers: readers(map[string]RFIDReaderConfig{
+					"cabinet-a": {Mode: RFIDModeEnclosureDiff, EnclosureID: "A", TagFile: "demo/tags/a.txt"},
+				}),
+			},
+		},
+		{
+			name: "mock reader — tag_file without allow_mock — error",
+			in: RFIDConfig{
+				Enabled: true,
+				Readers: readers(map[string]RFIDReaderConfig{
+					"cabinet-a": {Mode: RFIDModeEnclosureDiff, EnclosureID: "A", TagFile: "demo/tags/a.txt"},
+				}),
+			},
+			wantErr: "set rfid.allow_mock: true",
+		},
+		{
+			name: "mock reader — tag_file and host — error",
+			in: RFIDConfig{
+				Enabled:   true,
+				AllowMock: true,
+				Readers: readers(map[string]RFIDReaderConfig{
+					"cabinet-a": {Mode: RFIDModeEnclosureDiff, EnclosureID: "A", TagFile: "t.txt", Host: "h", Port: 5084},
+				}),
+			},
+			wantErr: "both tag_file and host/port",
+		},
+		{
+			name: "allow_mock alone does not exempt an LLRP reader from host — error",
+			in: RFIDConfig{
+				Enabled:   true,
+				AllowMock: true,
+				Readers: readers(map[string]RFIDReaderConfig{
+					"counter": {Mode: RFIDModeCounterScan},
+				}),
+			},
+			wantErr: "host is required",
+		},
 	}
 
 	for _, tc := range cases {
