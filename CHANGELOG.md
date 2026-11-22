@@ -9,6 +9,13 @@ History before this file is in `git log`.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-22
+
+**Breaking:** the six KV buckets are two, `KIOSK_CATALOG` and `KIOSK_STATE`,
+with key families inside, and the NATS roles are trimmed; apply the contract
+again. The platform can also keep each binary's NATS creds file current (ADR
+0009 in platform-docs).
+
 ### Breaking
 
 **Six KV buckets became two, with key families inside**, as accessd keeps
@@ -156,6 +163,7 @@ and anything else on `kiosk.>` (rule-router rules, NATS permissions) together.
   from the kit; `internal/authfix` is gone. Kiosk's branding and SPA routes
   differ from the other applications' and stay its own.
 
-[Unreleased]: https://github.com/stone-age-io/kiosk/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/stone-age-io/kiosk/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/stone-age-io/kiosk/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/stone-age-io/kiosk/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/stone-age-io/kiosk/releases/tag/v0.1.0
