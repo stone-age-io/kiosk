@@ -98,3 +98,16 @@ timeclock:
 
 rfid:
   enabled: false
+
+# Optional. The platform writes and rotates nats.credentials_file as this
+# binary's own Thing (ADR 0009 in platform-docs): a Regenerate or a Revoke
+# reaches it without a copied file or a restart. Set nats.credentials_file to a
+# path OUTSIDE the PocketBase data directory (pb_data_timeclock), e.g.
+# pb_creds/nats.creds, and leave the other NATS auth fields empty.
+# The password is for the first start only: KIOSK_PLATFORM_PASSWORD, never
+# here. See docs/configuration.md §5.1.
+platform:
+  url: ""                  # e.g. https://platform.example.com
+  identity: ""             # e.g. tc-01@ops.thing.local, printed at provision
+  sync_interval: 5m
+  allow_insecure: false    # development only: lets url be http://

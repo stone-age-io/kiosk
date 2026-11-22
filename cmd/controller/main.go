@@ -141,6 +141,21 @@ func main() {
 		if !cfg.NATS.Enabled {
 			return fmt.Errorf("nats.enabled must be true for the controller — set nats.url and enable")
 		}
+		// The platform keeps nats.credentials_file current as the
+		// controller's Thing (ADR 0009). It runs before the connect, which
+		// needs the file; with none after events.StartKeeper's wait, the
+		// connect below fails and the controller exits, as it does for any
+		// NATS it cannot reach.
+		keeperCtx, stopKeeper := context.WithCancel(context.Background())
+		app.OnTerminate().BindFunc(func(te *core.TerminateEvent) error {
+			stopKeeper()
+			return te.Next()
+		})
+		keeper, err := events.StartKeeper(keeperCtx, cfg, app.DataDir(), true)
+		if err != nil {
+			return fmt.Errorf("platform: %w", err)
+		}
+
 		pub, err := events.Connect(cfg.NATS, "kiosk-controller")
 		if err != nil {
 			return fmt.Errorf("nats connect: %w", err)
@@ -220,7 +235,7 @@ func main() {
 		// The platform's process contract: GET /api/ready. NATS fails here, since
 		// the controller does nothing without the bus. Discovery is skipped
 		// until nats.code is set: the controller has no kiosk code.
-		readiness.Serve(aggCtx, e, events.ControllerNATSReady(pub), readiness.ControllerCollections)
+		readiness.Serve(aggCtx, e, events.ControllerNATSReady(pub), readiness.ControllerCollections, events.Checks(keeper)...)
 		discovery := events.RegisterService(pub, events.ServiceController, "Stone Age kiosk controller", cfg.ThingCode())
 
 		app.OnTerminate().BindFunc(func(te *core.TerminateEvent) error {

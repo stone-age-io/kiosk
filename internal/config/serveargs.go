@@ -40,3 +40,14 @@ func EnsureServeBind(args []string, addr string) []string {
 		return args
 	}
 }
+
+// IsServe reports whether args run PocketBase's serve: an explicit `serve`,
+// or no subcommand, which EnsureServeBind turns into one. Work that only a
+// running server needs, such as the platform credential keeper, checks it so
+// `migrate` or `demo-seed` never waits on the platform.
+func IsServe(args []string) bool {
+	if len(args) < 2 || strings.HasPrefix(args[1], "-") {
+		return true
+	}
+	return args[1] == "serve"
+}

@@ -34,10 +34,14 @@ func Register(reg *health.Registry, app core.App, natsCheck health.Func, collect
 
 // Serve registers the checks, routes GET /api/ready to a cached prober, and
 // starts it until ctx is done. Call it from OnServe, after NATS is connected,
-// so the first probe sees the connection.
-func Serve(ctx context.Context, se *core.ServeEvent, natsCheck health.Func, collections []string) {
+// so the first probe sees the connection. extra adds further checks, such as
+// the platform credential keeper's (events.Checks).
+func Serve(ctx context.Context, se *core.ServeEvent, natsCheck health.Func, collections []string, extra ...func(*health.Registry)) {
 	var reg health.Registry
 	Register(&reg, se.App, natsCheck, collections)
+	for _, add := range extra {
+		add(&reg)
+	}
 	p := health.NewProber(&reg, version.Build(), 0, 0)
 	pbx.ServeReady(se, p)
 	p.Start(ctx)

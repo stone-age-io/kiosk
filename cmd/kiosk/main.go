@@ -76,6 +76,19 @@ func main() {
 	// Connect itself doesn't fail on unreachable servers — it returns a
 	// buffering connection. Errors here are structural (empty URL, bad
 	// creds file, etc.); log and proceed without a publisher.
+	// The platform keeps nats.credentials_file current as this binary's Thing
+	// (ADR 0009). It runs before the connect, which needs the file, and only
+	// for serve; see events.StartKeeper.
+	keeperCtx, stopKeeper := context.WithCancel(context.Background())
+	keeper, err := events.StartKeeper(keeperCtx, cfg, app.DataDir(), config.IsServe(os.Args))
+	if err != nil {
+		log.Fatalf("platform: %v", err)
+	}
+	app.OnTerminate().BindFunc(func(e *core.TerminateEvent) error {
+		stopKeeper()
+		return e.Next()
+	})
+
 	pub, err := events.Connect(cfg.NATS, "kiosk-"+cfg.Kiosk.Code)
 	if err != nil {
 		log.Printf("nats: continuing without event publishing — %v", err)
@@ -368,7 +381,7 @@ func main() {
 		})
 		// The platform's process contract: GET /api/ready. NATS only warns
 		// here, since a node keeps serving checkouts without it.
-		readiness.Serve(watcherCtx, e, events.NATSReady(pub), readiness.NodeCollections)
+		readiness.Serve(watcherCtx, e, events.NATSReady(pub), readiness.NodeCollections, events.Checks(keeper)...)
 		discovery = events.RegisterService(pub, events.ServiceKiosk, "Stone Age kiosk node", cfg.ThingCode())
 		e.Router.GET("/api/kiosk/identity", h.Identity)
 		e.Router.POST("/api/kiosk/scan", h.Scan)

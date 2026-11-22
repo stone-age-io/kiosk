@@ -24,6 +24,7 @@ type Config struct {
 	Returns    ReturnsConfig    `yaml:"returns"`
 	Branding   BrandingConfig   `yaml:"branding"`
 	NATS       NATSConfig       `yaml:"nats"`
+	Platform   PlatformConfig   `yaml:"platform"`
 	Controller ControllerConfig `yaml:"controller"`
 	RFID       RFIDConfig       `yaml:"rfid"`
 	Timeclock  TimeclockConfig  `yaml:"timeclock"`
@@ -175,6 +176,58 @@ type NATSConfig struct {
 	// already its Thing code; set it on the controller, which has no kiosk
 	// code. Empty there skips discovery registration.
 	Code string `yaml:"code"`
+}
+
+// PlatformConfig keeps nats.credentials_file current from the platform (ADR
+// 0009 in platform-docs). Each binary signs in as its own Thing with the kit's
+// credskeeper, writes the creds file, and rewrites it after a Regenerate or a
+// Revoke; the connection picks the new file up on its next reconnect. Empty
+// URL starts nothing, and credentials_file is a file you provide.
+type PlatformConfig struct {
+	// URL is the platform's base URL. https:// unless AllowInsecure.
+	URL string `yaml:"url"`
+	// Identity is this binary's Thing login email.
+	Identity string `yaml:"identity"`
+	// Password is needed only until the first sync has saved a session. Set
+	// it as KIOSK_PLATFORM_PASSWORD, then remove it.
+	Password string `yaml:"password"`
+	// SessionFile defaults to platform-session.json beside the creds file.
+	SessionFile string `yaml:"session_file"`
+	// SyncInterval defaults to 5m.
+	SyncInterval Duration `yaml:"sync_interval"`
+	// AllowInsecure lets URL be http://. Development only: the first sync
+	// sends the password and receives a private key.
+	AllowInsecure bool `yaml:"allow_insecure"`
+}
+
+// Enabled reports whether the platform keeps the creds file.
+func (p PlatformConfig) Enabled() bool { return p.URL != "" }
+
+// CredsOutside refuses a creds file or session file under dir, the PocketBase
+// data directory, which PocketBase backups archive whole: a backup must not
+// carry the Thing's session or credential, and a restored one must not give a
+// second host this binary's identity.
+func (c *Config) CredsOutside(dir string) error {
+	for key, path := range map[string]string{
+		"nats.credentials_file": c.NATS.CredentialsFile,
+		"platform.session_file": c.Platform.SessionFile,
+	} {
+		if path != "" && within(dir, path) {
+			return fmt.Errorf("%s (%s) is inside %s, which PocketBase backups archive; keep the platform's credentials in a directory beside it, such as pb_creds/", key, path, dir)
+		}
+	}
+	return nil
+}
+
+// within reports whether path is dir or under it.
+func within(dir, path string) bool {
+	d, err1 := filepath.Abs(dir)
+	p, err2 := filepath.Abs(path)
+	if err1 != nil || err2 != nil {
+		return false
+	}
+	rel, err := filepath.Rel(d, p)
+	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
 // ControllerConfig opts a kiosk into "managed" mode. When enabled, the kiosk
@@ -553,6 +606,28 @@ func applyEnvOverrides(c *Config) {
 	if v := os.Getenv("KIOSK_NATS_TLS_INSECURE"); v != "" {
 		c.NATS.TLSInsecure = parseBool(v)
 	}
+	if v := os.Getenv("KIOSK_PLATFORM_URL"); v != "" {
+		c.Platform.URL = v
+	}
+	if v := os.Getenv("KIOSK_PLATFORM_IDENTITY"); v != "" {
+		c.Platform.Identity = v
+	}
+	if v := os.Getenv("KIOSK_PLATFORM_PASSWORD"); v != "" {
+		c.Platform.Password = v
+	}
+	if v := os.Getenv("KIOSK_PLATFORM_SESSION_FILE"); v != "" {
+		c.Platform.SessionFile = v
+	}
+	if v := os.Getenv("KIOSK_PLATFORM_SYNC_INTERVAL"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil {
+			c.Platform.SyncInterval = Duration(d)
+		} else {
+			slog.Warn("config.env_override_ignored", "var", "KIOSK_PLATFORM_SYNC_INTERVAL", "value", v, "error", err)
+		}
+	}
+	if v := os.Getenv("KIOSK_PLATFORM_ALLOW_INSECURE"); v != "" {
+		c.Platform.AllowInsecure = parseBool(v)
+	}
 	if v := os.Getenv("KIOSK_CONTROLLER_ENABLED"); v != "" {
 		c.Controller.Enabled = parseBool(v)
 	}
@@ -636,6 +711,20 @@ func validate(c *Config) error {
 	}
 	if c.Session.CartGracePeriod <= 0 {
 		c.Session.CartGracePeriod = Duration(defaultCartGracePeriod)
+	}
+	if c.Platform.Enabled() {
+		if !c.NATS.Enabled {
+			return fmt.Errorf("platform.url is set but nats.enabled is false: the platform keeps a creds file only for a NATS connection")
+		}
+		if c.NATS.CredentialsFile == "" {
+			return fmt.Errorf("platform.url is set but nats.credentials_file is empty: the platform needs a path to write the creds file to")
+		}
+		if c.NATS.NKeySeedFile != "" || c.NATS.Token != "" || c.NATS.Username != "" {
+			return fmt.Errorf("platform.url is set with another NATS auth method: the platform's creds file is the credential, so leave token, username and nkey_seed_file empty")
+		}
+		if c.Platform.SyncInterval < 0 {
+			return fmt.Errorf("platform.sync_interval must be positive")
+		}
 	}
 	if err := validateRFID(&c.RFID); err != nil {
 		return err

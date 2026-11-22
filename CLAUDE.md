@@ -942,5 +942,13 @@ SPA hides catalog mutation buttons (gated on the `managed` flag in the
 identity payload). NATS must also be enabled and point at the same broker
 the controller publishes to.
 
+The `platform:` block (ADR 0009) makes each binary keep `nats.credentials_file`
+current as its own Thing: `events.StartKeeper` runs the kit's `credskeeper`
+before `events.Connect`, only for `serve` (`config.IsServe`), waits up to 30s
+for a first file, and refuses the files inside the PocketBase data directory
+(backups archive it). A new env override must be added by hand in
+`applyEnvOverrides`, like every other key. The keeper's checks reach
+`/api/ready` through `readiness.Serve`'s `extra` (`events.Checks`).
+
 `KIOSK_QUIET_BOOTSTRAP=1` suppresses the bootstrap admin credentials print —
 used by tests so test output isn't polluted; don't remove it.

@@ -11,6 +11,25 @@ History before this file is in `git log`.
 
 ### Added
 
+- **The platform keeps the NATS creds file current** (ADR 0009 in
+  platform-docs). Set `platform.url` and `platform.identity`, and a kiosk
+  node, a timeclock terminal or the controller signs in as its own Thing with
+  the kit's `credskeeper`, writes `nats.credentials_file`, and rewrites it
+  after a Regenerate or a Revoke. The connection moves to the new file
+  without a restart. The password is for the first start only
+  (`KIOSK_PLATFORM_PASSWORD`). `/api/ready` gains `credentials` and
+  `platform`. Only `serve` runs it. Without `platform.url` nothing changes.
+- **The platform's credentials are refused inside the PocketBase data
+  directory**, which PocketBase backups archive. A first start waits up to 30s
+  for the first creds file; then a node or a timeclock serves without NATS
+  until a restart, and the controller exits.
+
+### Changed
+
+- **Built on kit v0.2.0.**
+
+### Added
+
 - **The Northwind demo runs itself.** `demo/rules/` holds rule-router rules that
   drive the three kiosks (start a cart, scan, confirm) and punch workers in and
   out, with configs for every node in `demo/`. The kiosk decides each action.

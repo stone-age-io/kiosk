@@ -64,15 +64,21 @@ Type and its NATS role come from the repository's
    A second run changes nothing that already matches. It never deletes.
 2. **Create a Thing** of Thing Type `kiosk-controller`. Give its NATS user the
    `kiosk-controller` role.
-3. **Export the Thing's creds file.** Set `nats.credentials_file` to its path.
+3. **Give it the Thing's creds file.** Either set `platform.url` and
+   `platform.identity`, and the controller writes and rotates
+   `nats.credentials_file` itself as the Thing
+   ([Configuration §5.1](configuration.md#51-credentials-from-the-platform)),
+   or export the file from the platform and set `nats.credentials_file` to
+   its path.
 4. **Set `nats.code` to the Thing's code.** The controller registers on NATS
    service discovery as `kiosk-controller` and puts this value in the metadata
    as `code`. With `nats.code` empty, it skips the registration.
 
 The connection reconnects forever and keeps trying through auth errors.
 nats.go reads the creds file again on each reconnect. So a file that
-creds-keeper rewrites after a Revoke reaches the controller without a restart.
-A creds file copied by hand is fine for development.
+the platform rewrites after a Revoke reaches the controller without a restart.
+A creds file copied by hand is fine for development, and a Revoke then means
+copying the new one.
 
 The controller needs NATS. With `nats.enabled: false`, `serve` stops with an
 error. JetStream must be on for the account. On a NATS server you run

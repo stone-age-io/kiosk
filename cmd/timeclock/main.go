@@ -114,6 +114,19 @@ func main() {
 	// NATS is best-effort, exactly like cmd/kiosk: a standalone terminal runs
 	// fine without it. Connect returns (nil, nil) when disabled and a buffering
 	// connection on an unreachable broker; a non-nil error is structural.
+	// The platform keeps nats.credentials_file current as this binary's Thing
+	// (ADR 0009). It runs before the connect, which needs the file, and only
+	// for serve; see events.StartKeeper.
+	keeperCtx, stopKeeper := context.WithCancel(context.Background())
+	keeper, err := events.StartKeeper(keeperCtx, cfg, app.DataDir(), config.IsServe(os.Args))
+	if err != nil {
+		log.Fatalf("platform: %v", err)
+	}
+	app.OnTerminate().BindFunc(func(e *core.TerminateEvent) error {
+		stopKeeper()
+		return e.Next()
+	})
+
 	pub, err := events.Connect(cfg.NATS, "kiosk-timeclock-"+cfg.Kiosk.Code)
 	if err != nil {
 		log.Printf("nats: continuing without event publishing — %v", err)
@@ -258,7 +271,7 @@ func main() {
 		})
 		// The platform's process contract: GET /api/ready. NATS only warns,
 		// as on a node: a standalone terminal runs fine without it.
-		readiness.Serve(watcherCtx, e, events.NATSReady(pub), readiness.TimeclockCollections)
+		readiness.Serve(watcherCtx, e, events.NATSReady(pub), readiness.TimeclockCollections, events.Checks(keeper)...)
 		discovery = events.RegisterService(pub, events.ServiceTimeclock, "Stone Age timeclock terminal", cfg.ThingCode())
 		e.Router.GET("/api/kiosk/identity", h.Identity)
 		e.Router.GET("/branding/logo", h.Logo)
