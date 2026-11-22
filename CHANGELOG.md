@@ -9,6 +9,13 @@ History before this file is in `git log`.
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-11-22
+
+First tagged release, and the first from `stone-age-io/kiosk`. The sections
+below are what changed as the kiosk moved onto the ecosystem's conventions;
+earlier history is in `git log`. There are no release binaries yet: build
+from the tag (`npm run build --prefix ui`, then `go build ./cmd/...`).
+
 ### Breaking
 
 The repository moved from `skeeeon/kiosk` to
@@ -43,7 +50,7 @@ and anything else on `kiosk.>` (rule-router rules, NATS permissions) together.
 
 - **`contract/`**: the Thing Types, operations and NATS roles an organization
   needs, as a `stone` template. Onboard one with
-  `stone apply --template contract/` (stone-cli, unreleased). The roles are
+  `stone apply --template contract/` (stone v0.12.0). The roles are
   `kiosk-node`, `kiosk-timeclock` and `kiosk-controller`; only the
   controller's writes a bucket.
 - **`GET /api/ready`** on the node, the timeclock terminal and the
@@ -67,3 +74,6 @@ and anything else on `kiosk.>` (rule-router rules, NATS permissions) together.
   The NATS connection, discovery, readiness and the email-visibility hook come
   from the kit; `internal/authfix` is gone. Kiosk's branding and SPA routes
   differ from the other applications' and stay its own.
+
+[Unreleased]: https://github.com/stone-age-io/kiosk/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/stone-age-io/kiosk/releases/tag/v0.1.0
