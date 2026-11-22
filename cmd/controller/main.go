@@ -21,12 +21,13 @@ import (
 	"ganigeorgiev.com/pocketbase/pocketbase/apis"
 	"ganigeorgiev.com/pocketbase/pocketbase/core"
 	"ganigeorgiev.com/pocketbase/pocketbase/plugins/migratecmd"
+	"github.com/stone-age-io/kit/pbx"
 
-	"github.com/stone-age-io/kiosk/internal/authfix"
 	"github.com/stone-age-io/kiosk/internal/config"
 	"github.com/stone-age-io/kiosk/internal/controller"
 	"github.com/stone-age-io/kiosk/internal/events"
 	"github.com/stone-age-io/kiosk/internal/notifications"
+	"github.com/stone-age-io/kiosk/internal/readiness"
 	"github.com/stone-age-io/kiosk/internal/scheduler"
 	"github.com/stone-age-io/kiosk/internal/ui"
 
@@ -74,7 +75,7 @@ func main() {
 		Automigrate: true,
 	})
 
-	authfix.EnforceEmailVisibility(app)
+	pbx.EnforceEmailVisibility(app, "users", "admins")
 
 	controller.RegisterSeedCommand(app, cfg)
 	controller.RegisterDemoSeedCommand(app, cfg)
@@ -216,6 +217,12 @@ func main() {
 		// computeReconciliation. Registered here for symmetry / fire-time resolve.
 		scheduler.RegisterRunner("reconciliation", h.ReconciliationDigestRunner())
 
+		// The platform's process contract: GET /api/ready. NATS fails here, since
+		// the controller does nothing without the bus. Discovery is skipped
+		// until nats.code is set: the controller has no kiosk code.
+		readiness.Serve(aggCtx, e, events.ControllerNATSReady(pub), readiness.ControllerCollections)
+		discovery := events.RegisterService(pub, events.ServiceController, "Stone Age kiosk controller", cfg.ThingCode())
+
 		app.OnTerminate().BindFunc(func(te *core.TerminateEvent) error {
 			agg.Stop()
 			if hbSub != nil {
@@ -225,6 +232,9 @@ func main() {
 				_ = sightingSub.Unsubscribe()
 			}
 			aggCancel()
+			if discovery != nil {
+				_ = discovery.Stop()
+			}
 			if p := events.CurrentPublisher(); p != nil {
 				p.Close()
 			}

@@ -35,8 +35,9 @@ import (
 	"ganigeorgiev.com/pocketbase/pocketbase/apis"
 	"ganigeorgiev.com/pocketbase/pocketbase/core"
 	"ganigeorgiev.com/pocketbase/pocketbase/plugins/migratecmd"
+	"github.com/nats-io/nats.go/micro"
+	"github.com/stone-age-io/kit/pbx"
 
-	"github.com/stone-age-io/kiosk/internal/authfix"
 	"github.com/stone-age-io/kiosk/internal/cart"
 	"github.com/stone-age-io/kiosk/internal/catalog"
 	"github.com/stone-age-io/kiosk/internal/config"
@@ -45,6 +46,7 @@ import (
 	"github.com/stone-age-io/kiosk/internal/heartbeat"
 	"github.com/stone-age-io/kiosk/internal/kioskctx"
 	"github.com/stone-age-io/kiosk/internal/notifications"
+	"github.com/stone-age-io/kiosk/internal/readiness"
 	"github.com/stone-age-io/kiosk/internal/scheduler"
 	"github.com/stone-age-io/kiosk/internal/timeclock"
 	"github.com/stone-age-io/kiosk/internal/ui"
@@ -92,7 +94,7 @@ func main() {
 		Automigrate: true,
 	})
 
-	authfix.EnforceEmailVisibility(app)
+	pbx.EnforceEmailVisibility(app, "users", "admins")
 
 	// Match-only OAuth2 guard: a worker must already exist (provisioned by the
 	// controller in managed mode, or locally in standalone) with a matching
@@ -126,6 +128,7 @@ func main() {
 		checkoutFleet   *timeclock.CheckoutFleet
 	)
 	watcherCtx, watcherCancel := context.WithCancel(context.Background())
+	var discovery micro.Service // registered once serving
 	heartbeatCtx, heartbeatCancel := context.WithCancel(context.Background())
 
 	// Managed mode: sync workers (with email, for auth) from the catalog and
@@ -237,6 +240,9 @@ func main() {
 		}
 		watcherCancel()
 		heartbeatCancel()
+		if discovery != nil {
+			_ = discovery.Stop()
+		}
 		if p := events.CurrentPublisher(); p != nil {
 			p.Close()
 		}
@@ -250,6 +256,10 @@ func main() {
 		e.Router.GET("/health", func(re *core.RequestEvent) error {
 			return re.JSON(200, map[string]string{"status": "ok"})
 		})
+		// The platform's process contract: GET /api/ready. NATS only warns,
+		// as on a node: a standalone terminal runs fine without it.
+		readiness.Serve(watcherCtx, e, events.NATSReady(pub), readiness.TimeclockCollections)
+		discovery = events.RegisterService(pub, events.ServiceTimeclock, "Stone Age timeclock terminal", cfg.ThingCode())
 		e.Router.GET("/api/kiosk/identity", h.Identity)
 		e.Router.GET("/branding/logo", h.Logo)
 		e.Router.GET("/branding/custom.css", h.CustomCSS)

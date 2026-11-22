@@ -9,6 +9,7 @@ import (
 
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
+	kitnatsx "github.com/stone-age-io/kit/natsx"
 
 	"github.com/stone-age-io/kiosk/internal/config"
 )
@@ -126,61 +127,40 @@ func Connect(cfg config.NATSConfig, name string) (Publisher, error) {
 		return nil, errors.New("nats.enabled=true but nats.url is empty")
 	}
 
-	opts, err := buildNATSOptions(cfg, name)
+	if name == "" {
+		name = "kiosk"
+	}
+	extra, err := authOptions(cfg)
 	if err != nil {
 		return nil, err
 	}
-	nc, err := nats.Connect(cfg.URL, opts...)
+	// The kit's Connect reconnects forever, keeps trying through auth errors
+	// (so a creds file creds-keeper rewrites after a Revoke is picked up), and
+	// logs every connection event. RetryOnFailedConnect makes the *initial*
+	// dial behave the same way: if the server isn't reachable at startup, it
+	// still returns a connection that buffers publishes and dials in the
+	// background. That is what lets the kiosk boot even when the central NATS
+	// endpoint is down — the local ledger is authoritative regardless.
+	nc, err := kitnatsx.Connect(kitnatsx.Options{
+		URLs:                 []string{cfg.URL},
+		Creds:                cfg.CredentialsFile,
+		Name:                 name,
+		Log:                  slog.Default(),
+		RetryOnFailedConnect: true,
+		Extra:                append(extra, nats.ReconnectWait(2*time.Second)),
+	})
 	if err != nil {
-		return nil, fmt.Errorf("connect %s: %w", cfg.URL, err)
-	}
-	if nc.IsConnected() {
-		slog.Info("kiosk.nats.connected", "url", cfg.URL)
-	} else {
-		slog.Warn("kiosk.nats.connect_deferred",
-			"url", cfg.URL,
-			"note", "events will buffer locally until the server is reachable")
+		return nil, err
 	}
 	return &natsPublisher{nc: nc}, nil
 }
 
-// buildNATSOptions translates the config struct into nats.Options. Auth
-// knobs compose so an operator can mix (e.g., TLS + nkey). Returns an error
-// only for a structural problem an operator must fix (e.g., an unloadable
-// nkey seed) — network reachability is handled by RetryOnFailedConnect.
-func buildNATSOptions(cfg config.NATSConfig, name string) ([]nats.Option, error) {
+// authOptions translates the config's auth and TLS knobs into nats.Options.
+// They compose so an operator can mix (e.g., TLS + nkey). A creds file is not
+// here: the kit's Connect takes it directly. Returns an error only for a
+// structural problem an operator must fix (e.g., an unloadable nkey seed).
+func authOptions(cfg config.NATSConfig) ([]nats.Option, error) {
 	var opts []nats.Option
-
-	// Identify ourselves for nats-server logs.
-	if name == "" {
-		name = "kiosk"
-	}
-	opts = append(opts, nats.Name(name))
-
-	// Reconnect aggressively but quietly — kiosks live in flaky shop
-	// networks and we'd rather buffer-and-retry than fail-fast.
-	//
-	// RetryOnFailedConnect makes the *initial* dial behave the same way:
-	// if the server isn't reachable at startup, nats.Connect still returns
-	// a valid connection that buffers publishes and dials in the background.
-	// This is what lets the kiosk boot even when the central NATS endpoint
-	// is down — the local ledger is authoritative regardless.
-	opts = append(opts,
-		nats.RetryOnFailedConnect(true),
-		nats.ReconnectWait(2*time.Second),
-		nats.MaxReconnects(-1), // forever
-		nats.DisconnectErrHandler(func(_ *nats.Conn, err error) {
-			if err != nil {
-				slog.Warn("kiosk.nats.disconnected", "error", err)
-			}
-		}),
-		nats.ReconnectHandler(func(nc *nats.Conn) {
-			slog.Info("kiosk.nats.reconnected", "url", nc.ConnectedUrl())
-		}),
-		nats.ErrorHandler(func(_ *nats.Conn, _ *nats.Subscription, err error) {
-			slog.Warn("kiosk.nats.async_error", "error", err)
-		}),
-	)
 
 	// Auth modes — apply each that's configured. nats.go is happy with
 	// multiple options; the server enforces what it actually requires.
@@ -189,9 +169,6 @@ func buildNATSOptions(cfg config.NATSConfig, name string) ([]nats.Option, error)
 	}
 	if cfg.Username != "" || cfg.Password != "" {
 		opts = append(opts, nats.UserInfo(cfg.Username, cfg.Password))
-	}
-	if cfg.CredentialsFile != "" {
-		opts = append(opts, nats.UserCredentials(cfg.CredentialsFile))
 	}
 	if cfg.NKeySeedFile != "" {
 		opt, err := nats.NkeyOptionFromSeed(cfg.NKeySeedFile)

@@ -68,3 +68,6 @@ nats:
   tls_cert_file: ""
   tls_key_file: ""
   tls_insecure: false
+  # The controller's Thing code on the platform (ADR 0008). NATS service
+  # discovery carries it as `code`; empty skips the registration.
+  code: ""

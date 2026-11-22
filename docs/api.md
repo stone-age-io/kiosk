@@ -79,6 +79,7 @@ PB's `/api/collections/*` is used for PB-native CRUD.
 | `PATCH` | `/api/controller/notifications/{event_type}` | admin | **Controller only.** Update subject/body/enabled/recipients on a template. |
 | `GET` | `/api/controller/notifications/{event_type}/defaults` | admin | **Controller only.** Compiled-in defaults for "Reset to defaults" affordance. |
 | `GET` | `/health` | none | Returns `{status: "ok"}` — for liveness probes |
+| `GET` | `/api/ready` | none | The platform's readiness contract (Health & Metrics in platform-docs): the database, the binary's collections, the schema version and NATS, probed every 15 s. `503` only when a check fails. NATS warns on a node or timeclock (they keep working without it) and fails on the controller. |
 
 Admin endpoints require a token from the `admins` auth collection in the
 `Authorization` header (the PB SDK handles this automatically after

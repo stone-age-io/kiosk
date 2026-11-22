@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"testing"
 	"time"
+
+	kitsubjects "github.com/stone-age-io/kit/subjects"
 )
 
 // recordingPublisher captures every PublishBytes call so the test can
@@ -111,5 +113,24 @@ func TestPublishSetsTSAndMsgID(t *testing.T) {
 	_ = json.Unmarshal(p.payloads[3], &alert)
 	if _, err := time.Parse(time.RFC3339, alert.TS); err != nil {
 		t.Errorf("alert ts = %q, want the publish time in RFC 3339", alert.TS)
+	}
+}
+
+// The stream subject and the controller's consumer filters, through the kit's
+// overlap check (ADR 0008): every filter is inside the stream, and commands,
+// heartbeats and sightings are outside it.
+func TestStreamCapturesOnlyEvents(t *testing.T) {
+	stream := StreamSubjectFilter()
+	for _, f := range []string{TransactionCompleteFilter(), ItemActionFilter(), InventoryAdjustFilter(),
+		IntegrityRebuildFilter(), AdminCloseFilter(), InstanceLifecycleFilter(), ReceiptTransactionFilter(),
+		LowStockAlertFilter(), MaintenanceAlertFilter(), TimeclockPunchFilter(), ScanRFIDObservedFilter()} {
+		if !kitsubjects.Overlap(stream, f) {
+			t.Errorf("consumer filter %s is outside the stream subject %s", f, stream)
+		}
+	}
+	for _, f := range []string{CommandSubscribePattern("K1"), HeartbeatFilter(), SightingFilter()} {
+		if kitsubjects.Overlap(stream, f) {
+			t.Errorf("%s is not an event but the stream subject %s captures it", f, stream)
+		}
 	}
 }

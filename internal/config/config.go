@@ -168,6 +168,13 @@ type NATSConfig struct {
 	TLSCertFile     string `yaml:"tls_cert_file"`
 	TLSKeyFile      string `yaml:"tls_key_file"`
 	TLSInsecure     bool   `yaml:"tls_insecure"`
+
+	// Code is this process's Thing code on the platform (ADR 0008 rule 4),
+	// carried as `code` in NATS service discovery so the console can join the
+	// running process to its Thing. A node falls back to kiosk.code, which is
+	// already its Thing code; set it on the controller, which has no kiosk
+	// code. Empty there skips discovery registration.
+	Code string `yaml:"code"`
 }
 
 // ControllerConfig opts a kiosk into "managed" mode. When enabled, the kiosk
@@ -498,6 +505,9 @@ func applyEnvOverrides(c *Config) {
 	if v := os.Getenv("KIOSK_NATS_URL"); v != "" {
 		c.NATS.URL = v
 	}
+	if v := os.Getenv("KIOSK_NATS_CODE"); v != "" {
+		c.NATS.Code = v
+	}
 	if v := os.Getenv("KIOSK_NATS_SUBJECT_PREFIX"); v != "" {
 		c.NATS.SubjectPrefix = v
 	}
@@ -699,4 +709,13 @@ func validateRFID(r *RFIDConfig) error {
 			r.ReadWindow.AsDuration(), MaxEnclosureReadWindow)
 	}
 	return nil
+}
+
+// ThingCode is this process's Thing code for NATS service discovery:
+// nats.code when set, otherwise kiosk.code (a node's code is its Thing code).
+func (c *Config) ThingCode() string {
+	if c.NATS.Code != "" {
+		return c.NATS.Code
+	}
+	return c.Kiosk.Code
 }

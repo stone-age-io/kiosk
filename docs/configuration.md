@@ -61,6 +61,7 @@ nats:                          # Optional. Off by default.
   tls_cert_file: ""
   tls_key_file: ""
   tls_insecure: false          # skip cert verification — dev only
+  code: ""                     # Thing code for NATS service discovery; a node falls back to kiosk.code. Set it on the controller.
 
 rfid:                          # Optional. Off by default.
   enabled: false               # When true, the kiosk dials each configured reader at startup.

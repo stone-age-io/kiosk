@@ -11,8 +11,9 @@ import (
 	"ganigeorgiev.com/pocketbase/pocketbase/apis"
 	"ganigeorgiev.com/pocketbase/pocketbase/core"
 	"ganigeorgiev.com/pocketbase/pocketbase/plugins/migratecmd"
+	"github.com/nats-io/nats.go/micro"
+	"github.com/stone-age-io/kit/pbx"
 
-	"github.com/stone-age-io/kiosk/internal/authfix"
 	"github.com/stone-age-io/kiosk/internal/cart"
 	"github.com/stone-age-io/kiosk/internal/catalog"
 	"github.com/stone-age-io/kiosk/internal/commands"
@@ -24,6 +25,7 @@ import (
 	"github.com/stone-age-io/kiosk/internal/instances"
 	"github.com/stone-age-io/kiosk/internal/kioskctx"
 	"github.com/stone-age-io/kiosk/internal/notifications"
+	"github.com/stone-age-io/kiosk/internal/readiness"
 	"github.com/stone-age-io/kiosk/internal/rfid"
 	"github.com/stone-age-io/kiosk/internal/scheduler"
 	"github.com/stone-age-io/kiosk/internal/sightings"
@@ -61,7 +63,7 @@ func main() {
 		Automigrate: true,
 	})
 
-	authfix.EnforceEmailVisibility(app)
+	pbx.EnforceEmailVisibility(app, "users", "admins")
 
 	// `demo-seed` — the standalone Northwind demo. Registered here beside
 	// migratecmd because a subcommand must exist on the root command
@@ -79,6 +81,10 @@ func main() {
 		log.Printf("nats: continuing without event publishing — %v", err)
 	}
 	events.SetPublisher(pub)
+
+	// NATS service discovery, registered once serving; stopped on terminate
+	// before the connection closes.
+	var discovery micro.Service
 
 	// Managed mode: subscribe to the controller's catalog KV buckets and
 	// project changes into local items/users. Watcher is best-effort —
@@ -212,6 +218,9 @@ func main() {
 		}
 		for _, r := range rfidReaders {
 			_ = r.Close()
+		}
+		if discovery != nil {
+			_ = discovery.Stop()
 		}
 		if p := events.CurrentPublisher(); p != nil {
 			p.Close()
@@ -357,6 +366,10 @@ func main() {
 		e.Router.GET("/health", func(re *core.RequestEvent) error {
 			return re.JSON(200, map[string]string{"status": "ok"})
 		})
+		// The platform's process contract: GET /api/ready. NATS only warns
+		// here, since a node keeps serving checkouts without it.
+		readiness.Serve(watcherCtx, e, events.NATSReady(pub), readiness.NodeCollections)
+		discovery = events.RegisterService(pub, events.ServiceKiosk, "Stone Age kiosk node", cfg.ThingCode())
 		e.Router.GET("/api/kiosk/identity", h.Identity)
 		e.Router.POST("/api/kiosk/scan", h.Scan)
 		e.Router.GET("/api/kiosk/items", h.ItemsList)
