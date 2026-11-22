@@ -98,6 +98,20 @@ embed so a single binary can be re-skinned per deployment without rebuilding.
 That's the **only** thing that needs to sit next to the binary; `pb_data/`
 and `pb_data_controller/` are created on first run.
 
+## Release
+
+Tag-driven: pushing `vX.Y.Z` runs `.github/workflows/release.yml`, which runs
+goreleaser (`.goreleaser.yaml`). Its `before` hooks run `npm ci` and
+`npm run build` in `ui/`, because `internal/ui/dist` is gitignored and the
+binaries embed it, so the workflow installs Node. Before tagging, promote
+`## [Unreleased]` in `CHANGELOG.md` to `## [X.Y.Z] - date`, open a fresh empty
+`[Unreleased]`, and update the compare links at the bottom.
+`scripts/release-notes.sh` builds the body from that section and refuses an
+empty one. The version reaches `kit/version.Build()` through an ldflag
+(`kit/version.stamped`), so readiness and discovery report the tag. There is
+no container image. `goreleaser build --snapshot --single-target --id <binary>`
+checks the config locally; its output goes to the gitignored `dist/`.
+
 ## Tests
 
 ```bash

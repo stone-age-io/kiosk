@@ -367,6 +367,18 @@ operations, and a NATS role for each. As an owner or admin of the
 organization, run `stone apply --template contract/`. It is safe to re-run,
 and running it again moves an organization to a newer contract.
 
+## Releases
+
+Pushing a `v*` tag runs [the release workflow](.github/workflows/release.yml).
+goreleaser builds the SPA, then cross-compiles `kiosk-app`, `kiosk-controller`
+and `kiosk-timeclock` for Linux, macOS and Windows (amd64 and arm64; no Windows
+arm64), one archive per binary. The release body is the tag's section of
+[CHANGELOG.md](CHANGELOG.md), built by
+[`scripts/release-notes.sh`](scripts/release-notes.sh), which refuses an empty
+section. So promote `## [Unreleased]` to `## [X.Y.Z] - date` before tagging. A
+tag with a suffix (`v0.2.0-rc1`) reads `[Unreleased]` and publishes as a
+prerelease.
+
 ## Documentation
 
 The repo's deeper documentation lives under [`docs/`](docs/):

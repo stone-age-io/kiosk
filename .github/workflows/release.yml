@@ -1,0 +1,65 @@
+# Cuts a release when a v* tag is pushed: the three binaries, cross-compiled
+# by goreleaser, with the release body taken from CHANGELOG.md.
+#
+# Node is here because goreleaser's `before` hooks build the SPA, which the Go
+# binaries embed and the repository does not commit. There is no container
+# image: the kiosk has no Dockerfile.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write   # create the GitHub release
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # goreleaser derives the version from tags, and a shallow clone has
+          # none.
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      # The script refuses an empty section, so a tag pushed before
+      # `## [Unreleased]` was promoted fails here, before anything is built.
+      # `bash` rather than ./ so a lost mode bit cannot stop a release, as it
+      # did the helpdesk's v0.2.0.
+      - name: Build release notes from CHANGELOG.md
+        run: bash scripts/release-notes.sh "$GITHUB_REF_NAME" > "$RUNNER_TEMP/release-notes.md"
+
+      - uses: goreleaser/goreleaser-action@v7
+        with:
+          # The v2 line, not 'latest', so a goreleaser major cannot arrive
+          # mid-release without a commit asking for it.
+          version: '~> v2'
+          args: release --clean --release-notes=${{ runner.temp }}/release-notes.md
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # goreleaser exits 0 whether or not it used the notes file, so check the
+      # published body rather than trusting the exit code.
+      - name: Verify the release body came from CHANGELOG.md
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          body=$(gh release view "$GITHUB_REF_NAME" --json body --jq .body)
+          if ! grep -qF "## kiosk $GITHUB_REF_NAME" <<<"$body"; then
+            echo "::error::release body is not the one scripts/release-notes.sh built"
+            head -20 <<<"$body"
+            exit 1
+          fi
+          echo "release body OK ($(wc -l <<<"$body") lines)"

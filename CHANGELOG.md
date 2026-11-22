@@ -9,6 +9,13 @@ History before this file is in `git log`.
 
 ## [Unreleased]
 
+### Added
+
+- **Release binaries.** A `v*` tag now publishes `kiosk-app`,
+  `kiosk-controller` and `kiosk-timeclock` for Linux, macOS and Windows, with
+  the release body taken from this file. The controller's archive carries
+  `contract/`.
+
 ## [0.1.0] - 2026-11-22
 
 First tagged release, and the first from `stone-age-io/kiosk`. The sections

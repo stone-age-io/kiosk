@@ -1,0 +1,138 @@
+# Release configuration, ported from the helpdesk's with one difference that
+# matters: the `before` hooks build the SPA.
+#
+# internal/ui embeds internal/ui/dist, which is gitignored, so nothing compiles
+# until `npm run build` has filled it. The platform works the same way. The
+# release workflow installs Node for these hooks; a local
+# `goreleaser release --snapshot` needs Node too.
+version: 2
+
+project_name: kiosk
+
+before:
+  hooks:
+    # Plain command strings, not the {cmd, dir} form: goreleaser rejects the
+    # map form for before.hooks.
+    - sh -c 'cd ui && npm ci'
+    - sh -c 'cd ui && npm run build'
+
+# One template for the three binaries. `v{{.Version}}`, not `{{.Version}}`:
+# goreleaser strips the leading v, and a local `go build` from the same tag
+# reports "v0.1.0". {{.Version}} rather than {{.Tag}} so a snapshot says
+# v0.1.0-SNAPSHOT-<sha> instead of claiming to be the last release.
+builds:
+  - &build
+    id: kiosk-app
+    main: ./cmd/kiosk
+    binary: kiosk-app
+    env:
+      # PocketBase's SQLite driver is pure Go, so every target cross-compiles
+      # from one runner.
+      - CGO_ENABLED=0
+    flags: [-trimpath]
+    ldflags:
+      - -s -w -X github.com/stone-age-io/kit/version.stamped=v{{.Version}}
+    # A node runs on a Windows PC or a Raspberry Pi; the controller and the
+    # timeclock run wherever a small server does.
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+    ignore:
+      - goos: windows
+        goarch: arm64
+
+  - <<: *build
+    id: kiosk-controller
+    main: ./cmd/controller
+    binary: kiosk-controller
+
+  - <<: *build
+    id: kiosk-timeclock
+    main: ./cmd/timeclock
+    binary: kiosk-timeclock
+
+# One archive per binary: a node, a terminal and the controller are deployed
+# to different machines.
+archives:
+  - id: kiosk-app
+    ids: [kiosk-app]
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files:
+      - LICENSE
+      - README.md
+      - CHANGELOG.md
+      - kiosk.yaml.example
+      - branding/*
+      - docs/*.md
+    name_template: >-
+      kiosk-app_
+      {{- .Version }}_
+      {{- .Os }}_
+      {{- .Arch }}
+
+  - id: kiosk-controller
+    ids: [kiosk-controller]
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files:
+      - LICENSE
+      - README.md
+      - CHANGELOG.md
+      - controller.yaml.example
+      - contract/**/*
+      - docs/*.md
+    name_template: >-
+      kiosk-controller_
+      {{- .Version }}_
+      {{- .Os }}_
+      {{- .Arch }}
+
+  - id: kiosk-timeclock
+    ids: [kiosk-timeclock]
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files:
+      - LICENSE
+      - README.md
+      - CHANGELOG.md
+      - timeclock.yaml.example
+      - branding/*
+      - docs/*.md
+    name_template: >-
+      kiosk-timeclock_
+      {{- .Version }}_
+      {{- .Os }}_
+      {{- .Arch }}
+
+checksum:
+  name_template: 'checksums.txt'
+  algorithm: sha256
+
+# The release body is NOT built here: scripts/release-notes.sh assembles it
+# from CHANGELOG.md and the workflow passes it with --release-notes.
+#
+# DO NOT set `disable: true` here. Reading the --release-notes file is a step
+# inside the changelog pipe, so disabling the pipe publishes an empty body.
+# The platform shipped a release that way. These settings are only the
+# fallback for someone running goreleaser without the flag.
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^chore:'
+      - '^ci:'
+
+release:
+  github:
+    owner: stone-age-io
+    name: kiosk
+  # v0.2.0-rc1 publishes as a GitHub prerelease, not as "Latest".
+  prerelease: auto

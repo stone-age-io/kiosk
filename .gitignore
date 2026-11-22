@@ -32,3 +32,5 @@
 .env
 # Local Claude Code session config
 /.claude/
+# goreleaser output
+/dist/
