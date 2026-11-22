@@ -23,7 +23,7 @@ import (
 // that's it. Commands and heartbeats are outside the stream's filter space by
 // construction, not by exclusion-list discipline.
 //
-// Wire reference: docs/wire.md — payload shapes per subject.
+// Wire reference: docs/protocol.md — payload shapes per subject.
 const (
 	DefaultSubjectPrefix = "kiosk"
 	DefaultStreamName    = "KIOSK_EVENTS"

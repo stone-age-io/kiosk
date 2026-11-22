@@ -1,78 +1,120 @@
 # Troubleshooting
 
-## `localhost:8090` returns `{"message":"The requested resource wasn't found."}`
+This page lists common errors and their fixes. For build and test loops, see
+[Development](development.md). For deployment, backups and NATS failures, see
+[Operations](operations.md).
 
-The binary's embedded SPA bundle is empty. This happens when `go build`
-ran against an empty `internal/ui/dist/` (e.g., a fresh clone without
-`npm run build`). Rebuild in order:
+---
 
+## 1. The Root Page Returns "The requested resource wasn't found"
+
+`localhost:8090` returns this body:
+
+```json
+{"message":"The requested resource wasn't found."}
 ```
-npm run build --prefix ui      # populates internal/ui/dist/
-go build ./cmd/kiosk           # //go:embed picks up the new dist
+
+The binary has no SPA page to serve. Its embedded bundle came from an
+incomplete `internal/ui/dist/`. A missing or empty `dist/` does not get this
+far: `go build` stops with an embed error. Build the SPA first, then the
+binary:
+
+```bash
+npm run build --prefix ui      # fills internal/ui/dist/
+go build ./cmd/kiosk           # //go:embed takes the new dist/
 ```
 
-## "scan didn't trigger anything" during development
+---
 
-The `useScan` composable listens for `keydown` and dispatches on `Enter`.
-It skips when an `<input>`, `<textarea>`, `<select>`, or contenteditable
-element has focus. Click into the body of the page (anywhere outside an
-input) and type the badge or item code, then press Enter.
+## 2. A Scan Does Nothing During Development
 
-## Bootstrap admin credentials weren't printed
+The `useScan` composable listens for `keydown` and dispatches on Enter. It
+does nothing while one of these elements has focus:
 
-The migration runs **once**. If your `pb_data/` already has
-`_migrations` recording this migration, the seed has already happened.
-Either:
+- an `<input>`
+- a `<textarea>`
+- a `<select>`
+- a contenteditable element
 
-- Use the superuser UI at `/_/` to reset the existing admin's password, or
-- Delete `pb_data/` and start over (this wipes all data).
+Click the page body, outside any input. Then type the badge or item code and
+press Enter.
 
-## Commit returns 500
+---
 
-Watch the binary's stdout. The commit function rolls back the DB
-transaction on any error (invalid item ID, serialized item with qty > 1,
-etc.) and returns the wrapped error. The cart is left intact for retry.
+## 3. The Bootstrap Admin Credentials Did Not Print
 
-## A punch returns 409 (`already_clocked_in` / `not_clocked_in` / `open_checkouts`)
+The migration runs **once**. If `_migrations` in your `pb_data/` already
+records it, the seed has already run. Do one of these:
 
-These are expected conflicts, not errors — the SPA branches on the
-machine-readable `error` field. `already_clocked_in` / `not_clocked_in` mean
-the merged state already disagrees with the requested direction (often the
-worker punched at another kiosk and this kiosk's replica is fresher); the
-panel refreshes so the button matches. `open_checkouts` means
-`block_clock_out_with_open_checkouts` is on and the worker still holds tools —
-in managed mode this is fleet-wide (tools out at any kiosk, each tagged with
-the building to return it to), so the phone terminal blocks too. The body
-lists them; the worker can re-check (after returning) or **clock out anyway**
-to acknowledge and proceed. An admin punch with `force=true` is the override.
-If the gate seems *not* to fire when it should: the replica is eventually
-consistent and fail-open, so a brand-new checkout (or a controller/KV outage)
-can leave it briefly permissive — it self-heals on the next projection.
+- Reset the existing admin's password in the superuser UI at `/_/`.
+- Delete `pb_data/` and start again.
 
-## A worker can't sign in to the virtual timeclock terminal
+::: warning Deleting `pb_data/` removes all data
+It wipes all data of the kiosk node, not only the admin.
+:::
 
-Check, in order:
+---
 
-1. **Wrong binary.** Worker login only exists on `cmd/timeclock` (the
-   binary-only migration enables it). A regular `cmd/kiosk` never lets workers
-   authenticate.
-2. **`active=false`.** The `AuthRule` is `active = true`; a deactivated worker
-   can't get a session (and a still-valid token is rejected by `requireWorker`).
-3. **No email on the record.** Both SSO (email matching) and password reset
-   need the worker's email populated.
-4. **OAuth2 "this account is not provisioned for time clock access".** The
-   match-only guard rejected an IdP account whose email has no pre-provisioned
-   worker. Provision the worker first (managed: on the controller; standalone:
-   locally), with the matching email.
-5. **Password reset email never arrives.** Provisioning seeds a random
-   password, so workers must use "Forgot password" — which needs SMTP
-   configured (superuser UI → Settings → Mail).
+## 4. A Commit Returns 500
 
-## Tests fail with `find items: sql: no rows in result set`
+Read the binary's stdout. On any error, the commit function rolls back the
+database transaction and returns the wrapped error. Examples are an invalid
+item ID, or a serialized item with a quantity above 1. The cart stays as it
+was, so the worker can try again.
 
-This means migrations didn't run before the test seeded fixtures. The
-test helper in `internal/commit/commit_test.go` uses
-`core.NewMigrationsRunner` to apply migrations after `app.Bootstrap()`.
-If you're writing new tests against PB, follow the same pattern
-(`migratecmd`'s `Automigrate` hooks `OnServe`, not `OnBootstrap`, so it
-doesn't fire in tests that don't start a server).
+---
+
+## 5. A Punch Returns 409
+
+The body's `error` field is `already_clocked_in`, `not_clocked_in` or
+`open_checkouts`. These are expected conflicts, not errors. The SPA branches
+on the machine-readable `error` field.
+
+- **`already_clocked_in` or `not_clocked_in`.** The merged state already
+  disagrees with the requested direction. Often the worker punched at another
+  kiosk node, and this kiosk node's replica is newer. The panel refreshes so
+  that the button matches.
+- **`open_checkouts`.** `block_clock_out_with_open_checkouts` is on, and the
+  worker still holds tools. In managed mode the check covers the whole fleet:
+  tools out at any kiosk node, each tagged with the building to return it to.
+  So the timeclock terminal blocks too. The body lists the tools. The worker
+  can check again after a return, or select **clock out anyway** to
+  acknowledge and continue. An admin punch with `force=true` overrides it.
+
+If the check seems *not* to fire when it should, remember that the replica is
+eventually consistent and fail-open. A new checkout, or an outage of the
+controller or KV, can leave it permissive for a short time. It corrects
+itself at the next projection.
+
+---
+
+## 6. A Worker Cannot Sign In to the Timeclock Terminal
+
+Check these causes in order:
+
+1. **Wrong binary.** Worker sign-in exists only on `cmd/timeclock`. A
+   migration that only that binary runs enables it. A normal `cmd/kiosk`
+   never lets workers sign in.
+2. **`active=false`.** The `AuthRule` is `active = true`. A deactivated worker
+   cannot get a session, and `requireWorker` rejects a token that is still
+   valid.
+3. **No email on the record.** SSO matches by email, and password reset sends
+   an email. Both need the worker's email.
+4. **OAuth2 says "this account is not provisioned for time clock access".**
+   The match-only guard rejected an IdP account whose email has no
+   provisioned worker. Provision the worker first, with the matching email. In
+   managed mode, do it on the controller. Standalone, do it locally.
+5. **The password reset email never arrives.** Provisioning sets a random
+   password, so workers must use "Forgot password". That needs SMTP in the
+   superuser UI (Settings → Mail).
+
+---
+
+## 7. Tests Fail with `find items: sql: no rows in result set`
+
+The migrations did not run before the test seeded its fixtures. The test
+helper in `internal/commit/commit_test.go` calls `app.Bootstrap()`, then
+applies the migrations with `core.NewMigrationsRunner`. Follow the same
+pattern in a new test against PocketBase. The `Automigrate` of `migratecmd`
+hooks `OnServe`, not `OnBootstrap`, so it does not run in a test that starts
+no server.

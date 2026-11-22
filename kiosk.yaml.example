@@ -19,7 +19,7 @@ returns:
   allow_uncorrelated: true
 
 # Optional NATS event publishing. When enabled, every event the commit
-# hook fires is published to subjects like kiosk.{kiosk_code}.event.transaction.complete
+# hook fires is published to subjects like kiosk.{kiosk_code}.evt.transaction.complete
 # in addition to the local slog line. Disabled by default — leave it off
 # until you have a central reporting consumer to receive these.
 nats:
@@ -81,8 +81,8 @@ branding:
 #                     a single inventory cycle and adds resolved tags as
 #                     cart lines. Cart starts via the normal badge scan.
 #   - enclosure_diff  External access-control / camera systems publish
-#                     NATS commands at <prefix>.<code>.command.cart.start
-#                     and .command.read.trigger; kiosk diffs observed
+#                     NATS commands at <prefix>.<code>.cmd.cart.start
+#                     and .cmd.read.trigger; kiosk diffs observed
 #                     EPCs against the expected-present set to derive
 #                     checkout/return lines. enclosure_id is the opaque
 #                     label for the access-controlled cabinet, used as part
@@ -103,16 +103,18 @@ branding:
 #     checkout/consume lines when the worker is not clocked in. Returns are
 #     ALWAYS allowed regardless of punch state.
 #   - block_clock_out_with_open_checkouts  Clock-out is rejected while the
-#     worker has open checkouts at THIS kiosk (local-scoped by design; a
-#     tool out at another kiosk doesn't block). Admins can force past it
-#     with a reason — the "drove home with a tool" escape hatch.
+#     worker has open checkouts. Standalone, only this kiosk's checkouts
+#     count. In managed mode, a tool out at any kiosk blocks, and a stale or
+#     unavailable replica allows the clock-out (fail-open). The worker can
+#     acknowledge and clock out anyway. Admins can force past it with a
+#     reason: the "drove home with a tool" escape hatch.
 #   - timeclock_only  Dedicated punch station: the SPA replaces the
 #     checkout splash with a persistent punch panel and badge scans go
 #     straight to it — no carts, no checkout. Pairs naturally with a gate
 #     device feeding a managed fleet. Requires enabled=true. NOTE:
-#     block_clock_out_with_open_checkouts is a no-op on a punch-only
-#     station — open_checkouts is local-scoped and never written here, so
-#     tools out at other kiosks won't block a clock-out at this one.
+#     a punch-only station writes no checkouts of its own. Standalone,
+#     block_clock_out_with_open_checkouts is a no-op there. In managed mode
+#     it still blocks on the worker's fleet-wide open tools.
 #
 # In managed mode (controller.enabled=true + NATS), punches publish as
 # events, the controller projects them fleet-wide, and per-user clocked-in

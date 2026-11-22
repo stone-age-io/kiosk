@@ -1,126 +1,176 @@
 # Development
 
-## Prerequisites
+This page covers the prerequisites, the backend and frontend dev loops, the
+database reset and the test suite. The first build and run are in the
+repository's [README](../README.md#build-and-run). Common errors are in
+[Troubleshooting](troubleshooting.md).
 
-- **Go 1.27+** (required by PocketBase 0.41, imported from `ganigeorgiev.com/pocketbase`, never the archived `github.com/pocketbase`)
-- **Node 20+** with npm (any recent LTS works; tested on 25)
-- **A USB HID barcode scanner** for production. Any keyboard-emulating model:
-  Honeywell, Zebra, generic Chinese OEM. For development, your keyboard is fine.
+---
 
-## Backend dev loop
+## 1. Prerequisites
 
-```powershell
-# After Go changes:
-go build -o kiosk-app.exe ./cmd/kiosk
-.\kiosk-app.exe
+- **Go 1.27 or later.** PocketBase 0.41 requires it. Import PocketBase from
+  `ganigeorgiev.com/pocketbase`, never from the archived
+  `github.com/pocketbase`.
+- **Node 20.19+ or 22.12+, with npm.** Vite 8 requires one of these versions.
+  The build is tested on Node 25.
+- **A USB HID barcode scanner** in production. Any model that emulates a
+  keyboard works: Honeywell, Zebra, a generic Chinese OEM. For development,
+  your keyboard is sufficient.
+
+---
+
+## 2. Backend Dev Loop
+
+After a Go change, build and run the kiosk node:
+
+```bash
+go build -o kiosk-app ./cmd/kiosk   # Windows: go build -o kiosk-app.exe ./cmd/kiosk
+./kiosk-app                         # Windows: .\kiosk-app.exe
 ```
 
 The optional binaries build the same way:
-`go build ./cmd/controller` (central aggregator) and
-`go build ./cmd/timeclock` (the virtual timeclock terminal). Each uses its
-own config (`controller.yaml` / `timeclock.yaml`) and data dir
-(`pb_data_controller/` / `pb_data_timeclock/`), so all three can run from the
-same checkout during development without colliding.
 
-The binary auto-applies any new migrations on start. Migrations are tracked
-in PB's `_migrations` table; running the same binary twice is a no-op.
+- `go build ./cmd/controller`: the controller.
+- `go build ./cmd/timeclock`: the timeclock terminal.
 
-## Frontend dev loop
+Each binary has its own config and data directory, so all three can run from
+one checkout at the same time:
 
-For hot reload on SPA changes, run the Vite dev server alongside the Go
-binary:
+| Binary | Config | Data directory |
+| :--- | :--- | :--- |
+| `cmd/kiosk` | `kiosk.yaml` | `pb_data/` |
+| `cmd/controller` | `controller.yaml` | `pb_data_controller/` |
+| `cmd/timeclock` | `timeclock.yaml` | `pb_data_timeclock/` |
 
-```powershell
+The binary applies new migrations at startup. PocketBase records them in its
+`_migrations` table, so a second start of the same binary changes nothing.
+
+---
+
+## 3. Frontend Dev Loop
+
+For hot reload of SPA changes, run the Vite dev server next to the Go binary:
+
+```bash
 # Terminal 1
-.\kiosk-app.exe
+./kiosk-app
 
 # Terminal 2
-npm run dev --prefix ui                   # opens http://localhost:5173
+npm run dev --prefix ui             # opens http://localhost:5173
 ```
 
-The Vite config proxies `/api` and `/_` to `http://127.0.0.1:8090`, so the
-dev server hits your local Go binary for everything dynamic.
+The Vite config proxies `/api` and `/_` to `http://127.0.0.1:8090`. So the dev
+server sends every dynamic request to your local Go binary.
 
-To produce a production SPA bundle, run the npm build then re-run `go build`.
-Vite writes to `internal/ui/dist/`, which `internal/ui/embed.go` pulls into
-both binaries at compile time via `//go:embed`:
+For a production SPA bundle, run the npm build and then `go build` again.
+Vite writes to `internal/ui/dist/`. At compile time, `internal/ui/embed.go`
+puts that directory into each binary with `//go:embed`:
 
-```powershell
-npm run build --prefix ui                 # writes to internal/ui/dist/
-go build -o kiosk-app.exe ./cmd/kiosk     # embeds the dist/ bundle
+```bash
+npm run build --prefix ui           # writes internal/ui/dist/
+go build -o kiosk-app ./cmd/kiosk   # embeds the dist/ bundle
 ```
 
-## Resetting the database
+---
 
-```powershell
-Remove-Item -Recurse -Force pb_data       # on Linux/Mac: rm -rf pb_data
-.\kiosk-app.exe                            # re-runs migrations, re-seeds bootstrap admin
+## 4. Resetting the Database
+
+::: warning This deletes all local data
+`pb_data/` holds the whole state of the kiosk node.
+:::
+
+```bash
+rm -rf pb_data                      # Windows: Remove-Item -Recurse -Force pb_data
+./kiosk-app                         # runs the migrations again and seeds a new bootstrap admin
 ```
 
-## Testing
+---
 
-```powershell
+## 5. Testing
+
+```bash
 go test ./...
 ```
 
-The frontend has no test suite. SPA correctness is verified by `vue-tsc`
-during `npm run build`.
+The frontend has no test suite. `vue-tsc` checks the SPA during
+`npm run build`.
 
-### Tested modules
+### 5.1 Tested Packages
 
-- `internal/scan` — table-driven tests covering the resolver's dispatch
-  order including the instance-before-item precedence.
-- `internal/cart` — in-memory store: stacking rules, qty/action updates,
-  expiry, line removal.
-- `internal/commit` — the heart of the system. Integration tests spin up a
-  fresh PocketBase app per case via `pocketbase.NewWithConfig` +
-  `core.NewMigrationsRunner`, then exercise the state machine: checkout
-  (with qty=N row creation), return (correlated and uncorrelated),
-  cross-user return, consume (with `quantity_on_hand` decrement and
-  negative-allowed semantics), mixed cart, rollback-on-error, serialized
-  constraints, per-instance return targeting, and the policy flags
-  (cross-user / uncorrelated rejection). Admin force-close covers the
-  lost/damaged qty side-effect for quantity items and the serialized
-  variant (retire only — no `stock_adjustments` row, two events).
-- `internal/handlers` — stock-adjustment transaction (delta/absolute,
-  audit row written, empty reason rejected, item-not-found,
-  controller-source routes to `controller_admin_id`, idempotent replay
-  by `command_id` returns prior result without re-applying, serialized
-  items rejected with no row written and quantity untouched). Also the
-  virtual terminal's self-service punch endpoints: anonymous → 401,
-  non-`users` token → 403, inactive worker → 403, and the trust invariant
-  that a punch lands on the authenticated worker even when a different
-  `user_code` is smuggled in the body; plus the `cmd/timeclock`-only
-  worker-auth migration (`AuthRule` + OAuth2 enabled).
-- `internal/timeclock` — the punch funnel (per-source rules: self/foreman
-  alternation + target-active, admin backdate/force-with-reason, the
-  open-checkouts block — including the fleet-wide merge: a `CheckoutFleet`
-  row at another kiosk blocks, a self-tagged replica row doesn't double-block,
-  `force`/acknowledge bypasses, and a nil fleet falls back to local-only —
-  plus command_id idempotent replay), the `CurrentState` merge rule (local
-  ledger vs fleet `punch_state` replica, including the own-echo guard), and
-  `Pair` (display-only interval/day-total pairing).
-- `internal/instances` — the audit/lifecycle hooks plus the derived
-  `quantity_on_hand` recompute: create / to_maintenance / return_to_service
-  / retire / unretire track the non-retired-instance count (in_service +
-  maintenance; retired excluded), non-serialized items are never touched,
-  idempotent command replay doesn't double-count, and cascade-delete of the
-  parent item is safe.
-- `internal/events` — `Publish()` invokes any installed publisher; nil
-  publisher is a no-op (NATS path covered by manual smoke).
-- `internal/commands` — kiosk command dispatcher: inventory.adjust happy
-  path, every validation guard (missing fields, unknown item, bad mode,
-  serialized-item rejection), idempotent replay; inventory.snapshot
-  all-items + filter-by-codes; subject-suffix routing.
-- `internal/catalog` — payload round-trip with banned-field assertions;
-  the watcher's `upsertItem`/`upsertUser` against a real PB DB (verifies
-  that kiosk-local `quantity_on_hand` survives a catalog update);
-  soft-delete sets `active=false` and is idempotent for unknown codes.
-- `internal/controller` — idempotent transaction + line projection under
-  redelivery; "parent not yet here" produces a retry; unknown user/item
-  skipped with ack; `TouchKiosk` auto-registers on first sight and
-  advances `last_transaction_at` on subsequent transaction.complete
-  events. `KiosksForItem` / `ItemsForKiosk` membership helpers plus
-  cascade-delete verification on `kiosk_items`. Heartbeat registry:
-  record/snapshot, IsLikelyOnline thresholds, auto-register on first beat
-  (once), malformed-payload tolerance.
+- **`internal/scan`.** Table-driven tests of the resolver's dispatch order,
+  with instance lookups before item lookups.
+- **`internal/cart`.** The in-memory store: stacking rules, quantity and action
+  updates, expiry and line removal.
+- **`internal/commit`.** The center of the system. Each integration test
+  starts a fresh PocketBase app with `pocketbase.NewWithConfig` and
+  `core.NewMigrationsRunner`. Then it exercises the state machine:
+  - checkout, with one row per unit for quantity N
+  - return, correlated and uncorrelated
+  - cross-user return
+  - consume, with the `quantity_on_hand` decrement and negative values allowed
+  - a mixed cart, and rollback on error
+  - serialized constraints and per-instance return targeting
+  - the policy flags: rejection of cross-user and uncorrelated returns
+  - admin force-close: the lost or damaged quantity for quantity items, and
+    the serialized variant (retire only, no `stock_adjustments` row, two
+    events)
+- **`internal/handlers`.** The stock-adjustment transaction:
+  - delta and absolute modes, with the audit row written
+  - an empty reason rejected, and an item not found
+  - a controller source writes `controller_admin_id`
+  - a replay with the same `command_id` returns the earlier result and does
+    not apply it again
+  - a serialized item rejected, with no row written and the quantity
+    unchanged
+
+  It also tests the self-service punch endpoints of the timeclock terminal:
+  - anonymous → 401, a token not from `users` → 403, an inactive worker → 403
+  - the trust rule: a punch lands on the signed-in worker, even when the body
+    carries a different `user_code`
+  - the worker-auth migration that only `cmd/timeclock` runs (`AuthRule` and
+    OAuth2 enabled)
+- **`internal/timeclock`.** The punch funnel:
+  - per-source rules: self and foreman alternation with an active target, and
+    admin backdate or force with a reason
+  - the open-checkouts block, with the fleet-wide merge. A `CheckoutFleet` row
+    at another kiosk node blocks. A replica row tagged with this kiosk node
+    does not block twice. `force` and acknowledge bypass it. A nil fleet falls
+    back to local only.
+  - idempotent replay by `command_id`
+
+  It also tests the `CurrentState` merge rule: the local ledger against the
+  fleet `punch_state` replica, with the own-echo guard. And it tests `Pair`,
+  the interval and day-total pairing for display only.
+- **`internal/instances`.** The audit and lifecycle hooks, and the recompute of
+  the derived `quantity_on_hand`:
+  - create, to_maintenance, return_to_service, retire and unretire track the
+    count of non-retired instances (in service plus maintenance, retired
+    excluded)
+  - non-serialized items are never touched
+  - an idempotent command replay does not count twice
+  - a cascade delete of the parent item is safe
+- **`internal/events`.** `Publish()` calls the installed publisher, and a nil
+  publisher does nothing. A manual smoke test covers the NATS path.
+- **`internal/commands`.** The kiosk command dispatcher:
+  - `inventory.adjust`: the normal path, every validation guard (missing
+    fields, unknown item, bad mode, serialized item rejected) and idempotent
+    replay
+  - `inventory.snapshot`: all items, and a filter by codes
+  - routing by subject suffix
+- **`internal/catalog`.** The payload round trip, with assertions that banned
+  fields are absent. The watcher's `upsertItem` and `upsertUser` against a real
+  PocketBase database, which checks that the local `quantity_on_hand` of a
+  kiosk node survives a catalog update. A soft delete sets `active=false`, and
+  is idempotent for unknown codes.
+- **`internal/controller`.**
+  - Idempotent projection of transactions and lines under redelivery.
+  - "Parent not here yet" causes a retry. An unknown user or item is skipped
+    and acknowledged.
+  - `TouchKiosk` registers a kiosk node at first sight, and advances
+    `last_transaction_at` on each later `transaction.complete` event.
+  - The membership helpers `KiosksForItem` and `ItemsForKiosk`, and cascade
+    delete on `kiosk_items`.
+  - The heartbeat registry: record and snapshot, the `IsLikelyOnline`
+    thresholds, registration at the first beat (once) and tolerance of a
+    malformed payload.

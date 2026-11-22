@@ -1,157 +1,686 @@
 # Schema
 
-Collections are defined as code across `migrations/*.go`. The initial
-migration creates the first six; subsequent migrations add the
-per-instance and audit-log collections, notifications collections, and
-the controller-only `kiosks` registry and `kiosk_items` membership table
-(plus a few fields on `items`).
+This page lists every collection in the kiosk, its fields and their meaning. It
+also gives the cardinality rules for `open_checkouts` and the CSV import
+format. The schema is Go code in three migration packages. The migrations are
+the source of truth, and this page is the readable summary. For how the ledger
+uses these collections, see [Ledger](ledger.md). For the HTTP routes, see
+[API Reference](api.md). For the fleet side, see [Controller](controller.md).
 
-| Collection | Purpose |
-|---|---|
-| `users` | Workers (badge-holders). PB default auth collection, real emails kept for future notifications. Workers don't log in in v1. `group` is an optional FK to `groups`. |
-| `admins` | Foremen / admins. Separate PB auth collection. Login via email + password. |
-| `groups` | Sub-contractors / trades. `code` is the stable join key (CSV import, cross-fleet sync); metadata fields (`name`, `contact_email`, `contact_phone`, `notes`) are admin-managed and downstream features like email receipts use them. Optional on workers; deletion sets affected `users.group` to null. |
-| `items` | Tools and consumables (the SKU). `tracking_mode` is `quantity` or `serialized`. Carries `quantity_on_hand` and `reorder_threshold` (low-stock alert level; 0 disables the alert). `quantity_on_hand` is a stored, admin-adjustable value for `quantity` tools (fleet count) and consumables (current stock); for `serialized` SKUs it is a **derived** materialized view of the **non-retired** `item_instances` count (in_service + maintenance; retired excluded) — kept in sync by the instances recompute hook and not directly editable. Serialized SKUs also carry `requires_maintenance_on_return` (bool): when set, a returned unit is routed into maintenance automatically. |
-| `item_instances` | One physical unit of a serialized SKU. Holds the scannable `code`, the printed `serial`, an optional `rfid_epc`, and `status` — the lifecycle enum `in_service` \| `maintenance` \| `retired`. `in_service` is checkout-eligible; `maintenance` is physically present but parked (counts toward on-hand, not available); `retired` absorbs the old "decommissioned" state and the removed hard delete (units are never deleted, since the ledger keeps their FKs alive). "Checked out / out" is **not** a status — it stays derived from `open_checkouts`. FK to the parent `items` row. Also carries `enclosure_id` (the access-controlled cabinet this unit lives in — the `enclosure_diff` partition key) and the location/sightings fields: `ble_id` (a BLE beacon id, parallel to `rfid_epc`) and the advisory `last_observed_*` columns (`_at` date, `_zone`/`_gateway` text, `_lat`/`_lon` number). Last-observed is **advisory, lossy, last-write-wins** — written by RFID/BLE gateway sightings + custody reads, kiosk-local (never catalog-synced), and **never** gates custody. |
-| `instance_audit` | Append-only audit log of `item_instances` lifecycle changes. Written by PB record hooks (REST path) and `instances.SetStatusInTx` (commit / command-bus path): one row per `create` / `to_maintenance` / `return_to_service` / `retire` / `unretire`, carrying `prev_status` + `new_status`. The action verb is derived from the (prev → target) transition. Cosmetic edits (code/serial/notes) intentionally don't audit. Mirrors `stock_adjustments` in role; `commit.AdminClose` also writes a `retire` row when `closure_reason ∈ {lost, damaged}` retires a serialized instance. |
-| `transactions` | Append-only ledger. `kiosk_code`, `location_code`, `user`, `started_at`, `completed_at`, `status`. Optional `terminal_id` and `enclosure_id` (text, indexed) are attribution tags — empty for single-kiosk installs. `terminal_id` is the accepting/interacting screen (supplied on commit via the `?terminal=` URL param); `enclosure_id` is the access-controlled cabinet an RFID enclosure_diff cart drew from (`cart.EnclosureID`, set at StartByExternal). Pure attribution, never gates auth/correlation. Also carries `closed_by_admin` (FK, populated when the row was created by an admin force-close) and `command_id` (unique-when-non-empty, idempotency anchor for controller-forwarded closes). |
-| `transaction_lines` | One per item action within a transaction. `action` is `checkout`, `return`, `consume`, or `admin_close`. Carries optional `item_instance` FK for serialized lines. `original_checkout_user` (the worker whose open_checkout was closed) is set on `return` rows produced by the foreman-return endpoint and on every `admin_close` row. `admin_close` rows additionally carry `closure_reason` (`lost` \| `returned_offline` \| `damaged` \| `other`), `closed_by_admin` (FK for source=local), and `notes`. |
-| `open_checkouts` | Materialized view of "what's out right now." One row per unit out. Carries `item_instance` FK for serialized units. Maintained by the commit hook **on the kiosk**. The controller does not maintain this table — it derives "currently out" on demand by replaying `transaction_lines` (`ledger.ReplayOpenRows`). |
-| `time_punches` | Append-only timeclock ledger — one row per clock-in/clock-out punch. **API-readonly** (admin list/view; create/update/delete forbidden); written ONLY by the in-process punch funnel `timeclock.PerformPunch`. Fields: `user` (FK), `user_code`, `direction` (`in`\|`out`), `occurred_at` (business time; admin punches may backdate, live punches stamped server-side), `source` (`self`\|`foreman`\|`admin`\|`controller_admin`), exactly one actor field per non-self source (`recorded_by_admin` FK / `recorded_by_user` FK / `controller_admin_id` text), `reason`, `force` (bool — an admin override OR a self/foreman "clock out anyway" acknowledgment past the open-tools block; told apart by `source`), `job_code` (optional free-text job / work-order tag, supplied on a clock-in — an optional attribution column, never validated; display pairing carries it from the "in" punch onto the interval), `note` (optional free-text annotation on ANY punch — distinct from `reason`, which is required only for admin/corrective punches; usable by self/foreman too, never validated), `kiosk_code`, `location_code`, `command_id` (idempotency anchor, unique-when-non-empty), `created` (autodate). "Is this user clocked in" is **derived** — the latest punch by `occurred_at` (`created` breaks ties), merged with the fleet `punch_state` replica; there is deliberately no materialized open-shifts table. Shared kiosk migration, so the controller's DB has it too (the aggregator projects fleet punches into it). |
-| `stock_adjustments` | Append-only audit log of changes to a **quantity-tracked** item's `quantity_on_hand` made via `/api/kiosk/items/{id}/adjust` (local) or the controller's `inventory.adjust` command bus (remote). Serialized items are rejected by both paths (their quantity is derived). Stores `delta`, `new_quantity` (snapshot), `reason`, the responsible `admin` (FK, populated for `source=local`), `source` ('local' \| 'controller'), `controller_admin_id` (text — controller's admin id, populated for `source=controller`), and `command_id` (UUID, unique-when-non-empty for idempotent replay of remote commands). |
-| `notification_templates` | One row per event type (`receipt.transaction`, `alert.lowstock`, `alert.maintenance`, `digest.open_checkouts`, `digest.daily_activity`, `digest.maintenance`, `digest.timeclock`, `digest.timeclock_self`). Admin-editable subject/body Go templates plus a `recipients` JSON column (`{worker_email, all_admins, extras}`). `digest.timeclock_self` is the per-worker timesheet — the scheduler fans a single schedule row out to one email per worker, so its recipients are implicit and the row's recipients column is ignored. Seeded from compiled-in defaults; rows are append-only — editable, not deletable. Both binaries get the schema; on managed kiosks the local rows are dormant (sends fire from the controller's rows instead). |
-| `notification_send_log` | One row per attempted recipient. `status` is `sent` / `failed` / `skipped`. Pruned daily at 90 days. The controller's table holds the fleet-wide audit in managed mode; standalone kiosks log to their own. |
-| `notification_dedupe` | Race-free dedup gate for `SendIfFirst`. Unique on `(event_type, ref, day)`. Receipts use `ref = transaction_id`; low-stock uses `ref = item_id`. Scheduled digests intentionally skip this — repeating cadence is the feature. |
-| `scheduled_reports` | Admin-edited cron rows (`cadence` daily/weekly/monthly + hour + weekday/day_of_month). Per-row recipients override the template's stored recipients. In standalone deployments the kiosk runs the scheduler against its local data; in managed deployments the controller owns the cron + computation + SMTP and the kiosk's scheduler stays off entirely. The optional `kiosk_code` column scopes a controller row to one kiosk (empty = fleet-wide). |
-| `kiosks` | **Controller-only.** Registry of every kiosk in the fleet. A row appears either when an admin pre-registers the kiosk via the "New kiosk" button on AdminKiosksView, auto-populated with `status=unknown` the first time the aggregator sees a `transaction.complete` from a new `kiosk_code`, or auto-populated on the first heartbeat. `last_transaction_at` advances on `transaction.complete` only (its name finally matches its meaning now that heartbeat owns general liveness); the legacy `last_seen` field was dropped after its one-release deprecation window. Used for fleet visibility and as the join target when expanding aggregated transactions to "which kiosk did this come from?" |
-| `kiosk_items` | **Controller-only.** Membership rows tying items to kiosks. One row = one (kiosk, item) pair = "this kiosk stocks that SKU." Cascade-deletes from either side. Drives per-kiosk catalog publishing; absent rows mean the kiosk never receives that item over JetStream KV. |
-| `inventory_audit` | **Controller-only.** Fleet-wide append-only projection of every `inventory.adjust` event the aggregator sees. One row per adjustment, denormalized (`kiosk_code`, `item_code`, `item_name`, `delta`, `prev_quantity`, `new_quantity`, `reason`, `source`, `admin_id`). `source_adjustment_id` carries the originating kiosk's `stock_adjustments.id` and is unique-when-non-empty so JetStream redelivery never duplicates a row. Drives the Reports → Adjustment audit tab on the controller. |
-| `instance_lifecycle_audit` | **Controller-only.** Fleet-wide append-only projection of every `instance.lifecycle` event the aggregator sees. One row per lifecycle event, denormalized (`kiosk_code`, `item_code`, `item_name`, `instance_id`, `instance_code`, `action`, `prev_status`, `new_status`, `reason`, `source`, `admin_id`). `source_audit_id` carries the originating kiosk's `instance_audit.id` and is unique-when-non-empty so JetStream redelivery never duplicates a row. Drives the Reports → Instance lifecycle tab on the controller; the standalone kiosk's Reports tab reads its local `instance_audit` for the same view. |
-| `instance_location` | **Controller-only.** Fleet-wide advisory location view (location/sightings L3): the latest sighting per serialized unit, one row per `(kiosk_code, instance_code)` (unique), columns mirroring the kiosk's `last_observed_*`. The `SightingIngest` (plain core-NATS subscriber on the lossy `sighting` family — **not** the durable consumer) upserts it **monotonically** on `observed_at`. Latest-only, never a sighting log. The L4 reconciliation report joins it against the replayed ledger. |
-| `instance_epc_index` | **Controller-only.** EPC → owning-unit map (`rfid_epc` unique-when-non-empty → `instance_id`, `instance_code`, `kiosk_code`), populated by threading `rfid_epc` onto the `instance.lifecycle` projection. Lets the `SightingIngest` resolve a raw gateway sighting (which carries only a tag id) to its owning node. Bounded (one row per tagged unit). |
+---
 
-## Controller-only fields
+## 1. The Whole Schema
 
-The controller's `transactions` and `transaction_lines` collections carry
-extra fields not present on standalone kiosks:
-`source_kiosk_code` + `source_transaction_id` on transactions (unique
-pair index, idempotency key for redelivery) and `source_line_id` +
-`source_item_instance_id` on transaction_lines (the former unique-when-non-empty
-for idempotency; the latter the kiosk-local instance id, so the
-open-checkouts replay can pair a serialized checkout with its return).
-These — along with the `kiosks`, `kiosk_items`, `inventory_audit`, and
-`instance_lifecycle_audit` collections, `kiosks.last_transaction_at`, and
-the `open_checkouts.kiosk_code` + `source_item_instance_id` columns — are
-added by the controller-only migrations living in the sibling package
-`migrations/controller/`
-(`2000000000_controller_collections.go`,
-`2000100000_add_kiosk_items.go`,
-`2000200000_kiosks_last_transaction_at.go`,
-`2000300000_inventory_audit.go`,
-`2000400000_instance_lifecycle_audit.go`,
-`2000500000_open_checkouts_kiosk_code.go`,
-`2000700000_tx_lines_source_instance.go`, and the
-`2000600000`/`2000800000` create-then-drop of `applied_oc_closes` — the
-idempotency guard for the old materialized open-checkouts projection, no
-longer needed now that the controller replays the ledger). The controller's
-`time_punches` additionally carries `source_punch_id` (the originating
-kiosk's `time_punches.id`, unique-when-non-empty — the projection's
-idempotency anchor) and `source_actor` (text, for kiosk-admin actors whose
-FK can't resolve in the controller's DB), added by
-`2001100000_time_punches_source.go`. The location/sightings collections
-`instance_location` and `instance_epc_index` are added by
-`2001400000_instance_location.go` and `2001500000_instance_epc_index.go`.
-Each self-registers via `init()`. The kiosk binary doesn't import that
-package, so its DB never sees these.
+Three migration packages build the schema:
 
-The kiosk-side location/sightings fields (`item_instances.last_observed_*`,
-`ble_id`) are added by the kiosk migrations
+| Package | Path | Imported by |
+| :--- | :--- | :--- |
+| `migrations` | `migrations/` | Every binary: the kiosk node, the controller and the timeclock terminal |
+| `controllermigrations` | `migrations/controller/` | The controller only |
+| `timeclockmigrations` | `migrations/timeclock/` | The timeclock terminal only |
+
+`1779000000_init.go` creates the first six collections. It changes the default
+`users` auth collection in place and creates `admins`, `items`,
+`transactions`, `transaction_lines` and `open_checkouts`. Later migrations add
+the per-instance and audit-log collections, the notification collections, the
+timeclock ledger, and the controller-only collections. Each migration
+registers itself in `init()`. The controller imports both the shared and the
+controller packages, so the shared collections exist in its database too.
+
+| Collection | Where | Purpose |
+| :--- | :--- | :--- |
+| [`users`](#users) | All | Workers (badge holders). |
+| [`admins`](#admins) | All | Foremen and admins who sign in to the admin SPA. |
+| [`groups`](#groups) | All | Sub-contractors and trades. |
+| [`items`](#items) | All | Tools and consumables: the SKU. |
+| [`item_instances`](#item_instances) | All | One physical unit of a serialized SKU. |
+| [`instance_audit`](#instance_audit) | All | Append-only log of instance lifecycle changes. |
+| [`stock_adjustments`](#stock_adjustments) | All | Append-only log of quantity changes to quantity-tracked items. |
+| [`transactions`](#transactions) | All | The append-only ledger, one row per committed cart. |
+| [`transaction_lines`](#transaction_lines) | All | One row per item action in a transaction. |
+| [`open_checkouts`](#open_checkouts) | All | What is out right now. |
+| [`time_punches`](#time_punches) | All | Append-only timeclock ledger. |
+| [`notification_templates`](#notification_templates) | All | One editable template per event type. |
+| [`notification_send_log`](#notification_send_log) | All | One row per attempted recipient. |
+| [`notification_dedupe`](#notification_dedupe) | All | The once-per-day gate for `SendIfFirst`. |
+| [`scheduled_reports`](#scheduled_reports) | All | Admin-edited digest schedules. |
+| [`kiosks`](#kiosks) | Controller | Registry of every kiosk node in the fleet. |
+| [`kiosk_items`](#kiosk_items) | Controller | Which kiosk node stocks which SKU. |
+| [`inventory_audit`](#inventory_audit) | Controller | Fleet-wide projection of stock adjustments. |
+| [`instance_lifecycle_audit`](#instance_lifecycle_audit) | Controller | Fleet-wide projection of instance lifecycle events. |
+| [`instance_location`](#instance_location) | Controller | The latest advisory sighting per serialized unit. |
+| [`instance_epc_index`](#instance_epc_index) | Controller | EPC to owning unit map. |
+
+### Reading the tables
+
+- The tables leave out PocketBase's `id`, the auth system fields, and the
+  `created` and `updated` autodate fields, except where the app reads them.
+- "→ `items`" is a relation to that collection. A relation holds a PocketBase
+  id, so it is valid only inside one database.
+- "Unique when set" is a partial unique index that skips empty values.
+
+### Access rules
+
+- Every API rule is `@request.auth.collectionName = 'admins'`. Workers and
+  anonymous callers read nothing through the record API.
+- The append-only collections (`transactions`, `transaction_lines`,
+  `open_checkouts`, `instance_audit`, `stock_adjustments`, `time_punches`, the
+  notification log and dedupe tables, and the controller's audit and location
+  projections) have no create, update or delete rule. Only in-process code
+  writes them.
+- `notification_templates` has no create or delete rule. Migrations seed the
+  rows, and admins edit them.
+- On the controller, `kiosks` has no delete rule.
+
+---
+
+## 2. People
+
+### `users`
+
+Workers (badge holders). This is the default PocketBase auth collection,
+changed in place. It keeps real emails, for notifications such as receipts.
+Workers do not sign in, except on the timeclock terminal
+([§7](#7-timeclock-terminal-only-schema)).
+
+| Field | Type | Meaning |
+| :--- | :--- | :--- |
+| `email` | email, required | The worker's real email. |
+| `name` | text | Display name. |
+| `code` | text, required, unique | The worker's badge code. A scan resolves to it, and CSV import matches on it. |
+| `role` | select, required | `worker` or `foreman`. |
+| `active` | bool | |
+| `group` | → `groups`, optional | The worker's trade. Deleting the group sets this to null. |
+| `phone` | text | Optional direct line to this worker. `groups.contact_phone` covers the crew. |
+| `avatar` | file | The PocketBase default. |
+
+### `admins`
+
+Foremen and admins. A separate PocketBase auth collection. Admins sign in
+with email and password.
+
+| Field | Type | Meaning |
+| :--- | :--- | :--- |
+| `email` | email, required | Sign-in email. |
+| `name` | text, required | Display name. |
+| `active` | bool | Notifications to "all admins" go to active rows only. |
+
+### `groups`
+
+Sub-contractors and trades. Optional on workers.
+
+| Field | Type | Meaning |
+| :--- | :--- | :--- |
+| `code` | text, required, unique | The stable join key, for CSV import and cross-fleet sync. |
+| `name` | text, required | Display name. |
+| `contact_email` | email | Admin-managed. Later features, such as email receipts, use it. |
+| `contact_phone` | text | Admin-managed. |
+| `notes` | text | Admin-managed. |
+| `active` | bool | Indexed. |
+
+Deleting a group sets `users.group` to null on the affected workers.
+
+---
+
+## 3. Catalog
+
+### `items`
+
+Tools and consumables: the SKU.
+
+| Field | Type | Meaning |
+| :--- | :--- | :--- |
+| `code` | text, required, unique | The SKU code. CSV import matches on it. |
+| `name` | text, required | Display name. |
+| `type` | select, required | `tool` or `consumable`. |
+| `unit` | text | For example `each` or `box of 100`. |
+| `tracking_mode` | select, required | `quantity` or `serialized`. |
+| `category` | text | Indexed. |
+| `active` | bool | |
+| `notes` | text | |
+| `quantity_on_hand` | number (int) | See below. |
+| `reorder_threshold` | number (int) | The low-stock alert level. `0` disables the alert. |
+| `requires_maintenance_on_return` | bool | Serialized SKUs only. When set, a returned unit goes into maintenance automatically. |
+
+**`quantity_on_hand`** means two things, by tracking mode:
+
+- **`quantity` tools and consumables.** A stored value that admins can adjust.
+  For a `quantity` tool it is the fleet count. For a consumable it is the
+  current stock.
+- **`serialized` SKUs.** A **derived** materialized count of the
+  **non-retired** `item_instances` (`in_service` and `maintenance`, not
+  `retired`). The instances recompute hook keeps it in sync, and nobody can
+  edit it directly.
+
+### `item_instances`
+
+One physical unit of a serialized SKU.
+
+| Field | Type | Meaning |
+| :--- | :--- | :--- |
+| `item` | → `items`, required, cascade delete | The parent SKU. |
+| `code` | text, required, unique when set | The scannable code. |
+| `serial` | text | The printed serial. |
+| `rfid_epc` | text, unique when set | The optional RFID tag. Stored as trimmed, lower-case hex ([RFID](rfid.md)). |
+| `status` | select, required | `in_service`, `maintenance` or `retired`. See below. |
+| `notes` | text | |
+| `enclosure_id` | text, indexed | The access-controlled cabinet this unit lives in. It is the `enclosure_diff` partition key. |
+| `ble_id` | text, indexed | A BLE beacon id, parallel to `rfid_epc`. |
+| `last_observed_at` | date, indexed | Advisory last-observed time. |
+| `last_observed_zone` | text | Advisory last-observed zone. |
+| `last_observed_gateway` | text | Advisory last-observed gateway. |
+| `last_observed_lat` | number | Advisory last-observed latitude. |
+| `last_observed_lon` | number | Advisory last-observed longitude. |
+
+**`status`** is the lifecycle:
+
+- `in_service` is checkout-eligible.
+- `maintenance` is physically present but parked. It counts toward on-hand
+  and is not available.
+- `retired` replaces the old "decommissioned" state and the removed hard
+  delete. Units are never deleted, because the ledger keeps their relations
+  alive.
+
+"Checked out" is **not** a status. It stays derived from `open_checkouts`.
+
+**The `last_observed_*` fields are advisory, lossy and last-write-wins.** RFID
+and BLE gateway sightings and custody reads write them. They stay on the
+kiosk node and are never synced with the catalog. They **never** gate custody.
+
+### `instance_audit`
+
+Append-only log of `item_instances` lifecycle changes. It has the same role as
+`stock_adjustments` for quantity.
+
+| Field | Type | Meaning |
+| :--- | :--- | :--- |
+| `item_instance` | → `item_instances`, required | The unit. |
+| `item` | → `items`, required | Its SKU. |
+| `action` | select, required | `create`, `to_maintenance`, `return_to_service`, `retire` or `unretire`. Derived from the (previous → target) transition. |
+| `prev_status` | select | The status before the change. |
+| `new_status` | select | The status after the change. |
+| `reason` | text | |
+| `admin` | → `admins` | The responsible admin, for `source=local`. |
+| `controller_admin_id` | text | The controller's admin id, for `source=controller`. |
+| `source` | select, required | `local` or `controller`. |
+| `command_id` | text, unique when set | Idempotency anchor for remote commands. |
+
+Two writers add rows: PocketBase record hooks (the REST path) and
+`instances.SetStatusInTx` (the commit and command-bus path). There is one row
+per lifecycle action. Cosmetic edits (code, serial, notes) do not write a row,
+on purpose. `commit.AdminClose` also writes a `retire` row when
+`closure_reason` is `lost` or `damaged` and so retires a serialized instance.
+
+### `stock_adjustments`
+
+Append-only log of changes to a **quantity-tracked** item's
+`quantity_on_hand`. Two paths write it: `/api/kiosk/items/{id}/adjust` (local)
+and the controller's `inventory.adjust` command bus (remote). Both paths reject
+serialized items, because their quantity is derived.
+
+| Field | Type | Meaning |
+| :--- | :--- | :--- |
+| `item` | → `items`, required | The adjusted item. |
+| `delta` | number (int), required | The change. |
+| `new_quantity` | number (int), required | A snapshot of the quantity after the change. |
+| `reason` | text, required | |
+| `admin` | → `admins` | The responsible admin, for `source=local`. |
+| `source` | select, required | `local` or `controller`. |
+| `controller_admin_id` | text | The controller's admin id, for `source=controller`. |
+| `command_id` | text, unique when set | A UUID, for idempotent replay of remote commands. |
+
+---
+
+## 4. Ledger
+
+### `transactions`
+
+The append-only ledger. One row per committed cart.
+
+| Field | Type | Meaning |
+| :--- | :--- | :--- |
+| `kiosk_code` | text, required | The kiosk node that committed it. |
+| `location_code` | text, required | Its location. |
+| `user` | → `users`, required | The cart user. |
+| `started_at` | date | |
+| `completed_at` | date | |
+| `status` | select, required | `open`, `completed` or `voided`. |
+| `void_reason` | text | |
+| `lines_count` | number (int) | The number of lines, set once by the commit hook, so lists need no count per row. |
+| `user_group` | text | A snapshot of the worker's group code at commit, so reports stay correct after a worker changes group. |
+| `terminal_id` | text, indexed | Optional attribution tag. The screen that accepted the cart, from the `?terminal=` URL param on commit. |
+| `enclosure_id` | text, indexed | Optional attribution tag. The cabinet an RFID `enclosure_diff` cart drew from (`cart.EnclosureID`, set by `StartByExternal`). |
+| `closed_by_admin` | → `admins` | Set when an admin force-close created the row. |
+| `command_id` | text, unique when set | Idempotency anchor for closes the controller forwards. |
+
+`terminal_id` and `enclosure_id` are empty on a single-kiosk install. They are
+attribution only and never gate auth or correlation.
+
+### `transaction_lines`
+
+One row per item action in a transaction.
+
+| Field | Type | Meaning |
+| :--- | :--- | :--- |
+| `transaction` | → `transactions`, required, cascade delete | The parent transaction. |
+| `item` | → `items`, required | The SKU. |
+| `action` | select, required | `checkout`, `return`, `consume` or `admin_close`. |
+| `qty` | number (int), required | Always `1` on a serialized line. |
+| `serial` | text | |
+| `item_instance` | → `item_instances` | The unit, on a serialized line. |
+| `original_checkout_user` | → `users` | The worker whose open checkout this line closed. Set on `return` rows from the foreman-return endpoint and on every `admin_close` row. |
+| `uncorrelated` | bool | A return that matched fewer open rows than its `qty` ([§4 cardinality](#cardinality-rules-for-open_checkouts)). |
+| `closure_reason` | select | `admin_close` only: `lost`, `returned_offline`, `damaged` or `other`. |
+| `closed_by_admin` | → `admins` | `admin_close` only, for `source=local`. |
+| `notes` | text | Also carried on `admin_close` rows. |
+
+### `open_checkouts`
+
+A materialized view of what is out right now. One row per unit out.
+
+| Field | Type | Meaning |
+| :--- | :--- | :--- |
+| `item` | → `items`, required | The SKU. |
+| `item_instance` | → `item_instances` | The unit, for a serialized unit. |
+| `serial` | text, unique when set | |
+| `user` | → `users`, required | Who has it. |
+| `checked_out_at` | date, required | |
+| `transaction_line` | → `transaction_lines`, required | The checkout line that opened the row. |
+
+The commit hook maintains this table **on the kiosk node**. The controller does
+not maintain it. The controller derives "currently out" on demand by replaying
+`transaction_lines` (`ledger.ReplayOpenRows`).
+
+### Cardinality rules for `open_checkouts`
+
+- A `checkout` line with `qty=N` for a non-serialized tool creates **N rows**.
+- A `return` line with `qty=N` deletes up to **N rows**. If fewer matched, the
+  line is marked `uncorrelated=true`.
+- A serialized line always has `qty=1` and carries an `item_instance`
+  relation. At most one open row exists per instance at any time. A return
+  targets that exact instance, and sibling units of the same SKU stay as they
+  are.
+- Consumables create no `open_checkouts` rows. The commit hook decrements
+  `items.quantity_on_hand` by `qty` in the same transaction instead.
+
+::: note Consumable stock can go negative
+The ledger is authoritative. A worker who takes more than was recorded must
+not be blocked at the kiosk.
+:::
+
+---
+
+## 5. Timeclock
+
+### `time_punches`
+
+The append-only timeclock ledger, one row per clock-in or clock-out punch. It
+is **API-readonly**: admins can list and view, and create, update and delete
+are forbidden. Only the in-process punch funnel `timeclock.PerformPunch`
+writes it.
+
+| Field | Type | Meaning |
+| :--- | :--- | :--- |
+| `user` | → `users`, required | The worker. |
+| `user_code` | text, required | The worker's code. |
+| `direction` | select, required | `in` or `out`. |
+| `occurred_at` | date, required | Business time. Admin punches can backdate. The server stamps live punches. |
+| `source` | select, required | `self`, `foreman`, `admin` or `controller_admin`. |
+| `recorded_by_admin` | → `admins` | The actor for an `admin` punch. |
+| `recorded_by_user` | → `users` | The actor for a `foreman` punch. |
+| `controller_admin_id` | text | The actor for a `controller_admin` punch. |
+| `reason` | text | Required only for admin and corrective punches. |
+| `force` | bool | An admin override, or a self or foreman "clock out anyway" past the open-tools block. `source` tells them apart. |
+| `job_code` | text | An optional job or work-order tag on a clock-in. Never validated. The display pairing carries it from the "in" punch onto the interval. |
+| `note` | text | An optional annotation on any punch, also self and foreman. Separate from `reason`. Never validated. |
+| `kiosk_code` | text, required | Where the punch happened. |
+| `location_code` | text | |
+| `command_id` | text, unique when set | Idempotency anchor. |
+| `created` | autodate | Breaks ties on `occurred_at`. |
+
+A non-self punch sets exactly one actor field (`recorded_by_admin`,
+`recorded_by_user` or `controller_admin_id`).
+
+"Is this user clocked in" is **derived**. It is the latest punch by
+`occurred_at` (with `created` as the tiebreaker), merged with the fleet
+`punch_state` replica. There is no materialized open-shifts table, on purpose.
+The migration is shared, so the controller's database has the collection too,
+and the aggregator projects fleet punches into it.
+
+---
+
+## 6. Notifications
+
+The schema is in every binary. On a managed kiosk node the local template rows
+are dormant, because sends fire from the controller's rows. See
+[Notifications](notifications.md).
+
+### `notification_templates`
+
+One row per event type. The event types are `receipt.transaction`,
+`alert.lowstock`, `alert.maintenance`, `digest.open_checkouts`,
+`digest.daily_activity`, `digest.maintenance`, `digest.reconciliation`,
+`digest.timeclock` and `digest.timeclock_self`.
+
+| Field | Type | Meaning |
+| :--- | :--- | :--- |
+| `event_type` | text, required, unique | The key. Code finds a template by event, not by id. |
+| `name` | text, required | Display name. |
+| `enabled` | bool | Per-event gate. Turning it off stops sends and keeps the content. |
+| `subject` | text | A Go template. |
+| `body` | text | A Go template. |
+| `recipients` | json | `{worker_email, all_admins, extras}`. |
+| `updated_by` | → `admins` | The last admin to edit the row. |
+
+Migrations seed the rows from compiled-in defaults. Admins can edit a row but
+cannot delete it. `digest.timeclock_self` is the per-worker timesheet. The
+scheduler sends one email per worker from a single schedule row, so its
+recipients are implicit and the scheduler ignores the row's `recipients`.
+
+### `notification_send_log`
+
+One row per attempted recipient.
+
+| Field | Type | Meaning |
+| :--- | :--- | :--- |
+| `event_type` | text, required | |
+| `template` | → `notification_templates` | |
+| `recipient` | text | |
+| `status` | select, required | `sent`, `failed` or `skipped`. |
+| `error` | text | |
+| `payload_summary` | text | |
+
+A daily prune removes rows older than 90 days. In managed mode the
+controller's table holds the fleet-wide audit. A standalone kiosk node logs to
+its own.
+
+### `notification_dedupe`
+
+The race-free deduplication gate for `SendIfFirst`.
+
+| Field | Type | Meaning |
+| :--- | :--- | :--- |
+| `event_type` | text, required | |
+| `ref` | text, required | Receipts use the transaction id. Low-stock uses the item id. |
+| `day` | text, required | |
+
+The three fields are unique together: `(event_type, ref, day)`. Scheduled
+digests skip this table on purpose, because the repeat is the feature.
+
+### `scheduled_reports`
+
+Admin-edited schedule rows.
+
+| Field | Type | Meaning |
+| :--- | :--- | :--- |
+| `report_key` | select, required | `open_checkouts`, `daily_activity`, `maintenance`, `timeclock`, `timeclock_self` or `reconciliation`. |
+| `cadence` | select, required | `daily`, `weekly` or `monthly`. |
+| `hour` | number (int), required | |
+| `weekday` | number (int) | For `weekly`. |
+| `day_of_month` | number (int) | For `monthly`. |
+| `enabled` | bool | Indexed. |
+| `recipients` | json | Overrides the template's stored recipients for this row. |
+| `subject_override` | text | |
+| `last_run_at` | date | |
+| `last_status` | text | |
+| `last_error` | text | |
+| `kiosk_code` | text | Scopes a controller row to one kiosk node. Empty means fleet-wide. |
+
+In a standalone deployment the kiosk node runs the scheduler against its local
+data. In a managed deployment the controller owns the schedule, the
+computation and SMTP, and the kiosk node's scheduler stays off.
+
+---
+
+## 7. Timeclock-Terminal-Only Schema
+
+The virtual timeclock terminal (`cmd/timeclock`) applies one extra migration
+that no other binary imports: `migrations/timeclock/` (Go package
+`timeclockmigrations`), with the same isolation as `migrations/controller/`.
+
+It turns `users` into a real worker sign-in surface, in that binary's
+database only. It sets `AuthRule = "active = true"` and
+`OAuth2.Enabled = true`, so active workers can sign in with SSO, a password,
+or both. The row-level list, view, create and update rules stay admins-only.
+The migration turns on authentication, not data access. Kiosk nodes and the
+controller never import the package, so worker sign-in stays off there.
+
+---
+
+## 8. Controller-Only Schema
+
+The controller-only migrations are in the package `migrations/controller/`.
+The kiosk binary does not import it, so a kiosk node's database never has
+these collections or fields.
+
+### Extra fields on shared collections
+
+| Collection | Field | Type | Meaning |
+| :--- | :--- | :--- | :--- |
+| `transactions` | `source_kiosk_code` | text | With `source_transaction_id`, the redelivery idempotency key. The pair is unique when both are set. |
+| `transactions` | `source_transaction_id` | text | The originating kiosk node's transaction id. |
+| `transaction_lines` | `source_line_id` | text, unique when set | Idempotency anchor for redelivery. |
+| `transaction_lines` | `source_item_instance_id` | text | The kiosk-local instance id, so the open-checkouts replay can pair a serialized checkout with its return. |
+| `open_checkouts` | `kiosk_code` | text, indexed | The kiosk node the unit is out from. |
+| `open_checkouts` | `source_item_instance_id` | text | The kiosk-local instance id. |
+| `time_punches` | `source_punch_id` | text, unique when set | The originating kiosk node's `time_punches.id`. The projection's idempotency anchor. |
+| `time_punches` | `source_actor` | text | The actor, for a kiosk-admin actor whose relation cannot resolve in the controller's database. |
+
+### `kiosks`
+
+Registry of every kiosk node in the fleet. It gives fleet visibility. It is also the join
+target for "which kiosk node did this aggregated transaction come from?". A row appears in
+one of three ways:
+
+- An admin pre-registers the kiosk node with the "New kiosk" button on
+  `AdminKiosksView`.
+- The aggregator creates it with `status=unknown` the first time it sees a
+  `transaction.complete` from a new `kiosk_code`.
+- The first heartbeat creates it.
+
+| Field | Type | Meaning |
+| :--- | :--- | :--- |
+| `kiosk_code` | text, required, unique | The kiosk node's code. |
+| `location_code` | text | |
+| `status` | select, required | `unknown`, `active` or `disabled`. |
+| `notes` | text | |
+| `last_transaction_at` | date | Advances on `transaction.complete` only. The heartbeat, not this table, gives general liveness. |
+
+### `kiosk_items`
+
+Membership rows. One row is one (kiosk node, item) pair: "this kiosk node
+stocks that SKU".
+
+| Field | Type | Meaning |
+| :--- | :--- | :--- |
+| `kiosk` | → `kiosks`, required, cascade delete | |
+| `item` | → `items`, required, cascade delete | |
+
+The pair is unique. A delete on either side removes the row. The rows drive
+per-kiosk catalog publishing. A kiosk node never receives an item over
+JetStream KV unless a row ties it to that item.
+
+### `inventory_audit`
+
+Fleet-wide, append-only projection of every `inventory.adjust` event the
+aggregator sees. One row per adjustment, denormalized. It feeds the
+Reports → Adjustment audit tab on the controller.
+
+| Field | Type | Meaning |
+| :--- | :--- | :--- |
+| `kiosk_code` | text, required | |
+| `item_code` | text, required | |
+| `item_name` | text | |
+| `mode` | text | The adjust mode, `delta` or `absolute`. |
+| `delta` | number (int) | |
+| `prev_quantity` | number (int) | |
+| `new_quantity` | number (int) | |
+| `reason` | text | |
+| `source` | select | `local` or `controller`. |
+| `admin_id` | text | |
+| `command_id` | text | |
+| `occurred_at` | date | |
+| `source_adjustment_id` | text, unique when set | The originating kiosk node's `stock_adjustments.id`. JetStream redelivery never duplicates a row. |
+
+### `instance_lifecycle_audit`
+
+Fleet-wide, append-only projection of every `instance.lifecycle` event the
+aggregator sees. One row per lifecycle event, denormalized. It feeds the
+Reports → Instance lifecycle tab on the controller. A standalone kiosk node's
+Reports tab reads its local `instance_audit` for the same view.
+
+| Field | Type | Meaning |
+| :--- | :--- | :--- |
+| `kiosk_code` | text, required | |
+| `item_code` | text | |
+| `item_name` | text | |
+| `instance_id` | text, required, indexed | |
+| `instance_code` | text | |
+| `action` | select, required | The same values as `instance_audit.action`. |
+| `prev_status` | select | |
+| `new_status` | select | |
+| `reason` | text | |
+| `source` | select | `local` or `controller`. |
+| `admin_id` | text | |
+| `command_id` | text | |
+| `occurred_at` | date | |
+| `source_audit_id` | text, unique when set | The originating kiosk node's `instance_audit.id`. JetStream redelivery never duplicates a row. |
+
+### `instance_location`
+
+The fleet-wide advisory location view (location and sightings, L3): the latest
+sighting per serialized unit. It holds the latest value only and is never a
+sighting log.
+
+| Field | Type | Meaning |
+| :--- | :--- | :--- |
+| `kiosk_code` | text, required | Unique with `instance_code`. |
+| `instance_code` | text, required | Unique with `kiosk_code`. |
+| `instance_id` | text, indexed | |
+| `item_code` | text | |
+| `last_observed_at` | date, indexed | Mirrors the kiosk node's `last_observed_*` columns. |
+| `last_observed_zone` | text | |
+| `last_observed_gateway` | text | |
+| `last_observed_lat` | number | |
+| `last_observed_lon` | number | |
+
+The `SightingIngest` upserts it **monotonically** on `observed_at`. It is a
+plain core-NATS subscriber on the lossy `sighting` channel, **not** the durable
+consumer. The L4 reconciliation report joins this table against the replayed
+ledger.
+
+### `instance_epc_index`
+
+The EPC to owning unit map. The aggregator fills it from the `rfid_epc` it
+threads onto the `instance.lifecycle` projection. It lets the `SightingIngest`
+resolve a raw gateway sighting, which carries only a tag id, to its owning
+kiosk node. It is bounded: one row per tagged unit.
+
+| Field | Type | Meaning |
+| :--- | :--- | :--- |
+| `rfid_epc` | text, required, unique when set | The tag. |
+| `instance_id` | text | |
+| `instance_code` | text | |
+| `kiosk_code` | text, required | The owning kiosk node. |
+| `item_code` | text | Lets the fleet location report name what the unit is. |
+| `item_name` | text | |
+
+### Controller migrations
+
+| Migration | What it adds or changes |
+| :--- | :--- |
+| `2000000000_controller_collections.go` | `kiosks`, `source_kiosk_code` and `source_transaction_id` on `transactions`, and `source_line_id` on `transaction_lines` |
+| `2000100000_add_kiosk_items.go` | `kiosk_items` |
+| `2000200000_kiosks_last_transaction_at.go` | `kiosks.last_transaction_at` |
+| `2000300000_inventory_audit.go` | `inventory_audit` |
+| `2000400000_instance_lifecycle_audit.go` | `instance_lifecycle_audit` |
+| `2000500000_open_checkouts_kiosk_code.go` | `kiosk_code` and `source_item_instance_id` on `open_checkouts` |
+| `2000600000_applied_oc_closes.go`, `2000800000_drop_applied_oc_closes.go` | Create, then drop, `applied_oc_closes`. It was the idempotency guard for the old materialized open-checkouts projection. The controller now replays the ledger. |
+| `2000700000_tx_lines_source_instance.go` | `source_item_instance_id` on `transaction_lines` |
+| `2000900000_instance_lifecycle_audit_status.go` | Moves `instance_lifecycle_audit` to the `status` vocabulary (`prev_status`, `new_status`) |
+| `2001000000_drop_kiosks_last_seen.go` | Drops the old `kiosks.last_seen` |
+| `2001100000_time_punches_source.go` | `source_punch_id` and `source_actor` on `time_punches` |
+| `2001200000_transactions_door_id.go`, `2001300000_rename_door_to_terminal.go` | `terminal_id` and `enclosure_id` on the controller's projected `transactions` |
+| `2001400000_instance_location.go` | `instance_location` |
+| `2001500000_instance_epc_index.go` | `instance_epc_index` |
+| `2001600000_epc_index_item.go` | `item_code` and `item_name` on `instance_epc_index` |
+
+The kiosk-side location and sightings fields (`item_instances.last_observed_*`
+and `ble_id`) come from the shared migrations
 `1803000000_instance_last_observed.go` and `1804000000_instance_ble_id.go`.
 
-## Virtual-terminal-only schema (`cmd/timeclock`)
+---
 
-The virtual timeclock terminal applies one extra migration that no other
-binary imports — `migrations/timeclock/` (Go package `timeclockmigrations`,
-same isolation pattern as `migrations/controller/`). It turns the `users`
-collection into a real worker-auth surface on that binary's DB only: sets
-`AuthRule = "active = true"` and `OAuth2.Enabled = true` so active workers can
-sign in (SSO and/or password). Row-level list/view/create/update rules stay
-admins-only; this only enables authentication, not data access. Regular kiosks
-and the controller never import this package, so worker login stays off there.
+## 9. CSV Import Format
 
-## Cardinality rules for `open_checkouts`
-
-- A `checkout` line with `qty=N` for a non-serialized tool creates **N
-  rows**.
-- A `return` line with `qty=N` deletes up to **N rows** (line marked
-  `uncorrelated=true` if fewer matched).
-- A serialized line always has `qty=1` and carries an `item_instance`
-  FK. At most one open row exists per instance at any time; returning
-  targets that exact instance — sibling units of the same SKU are
-  untouched.
-- Consumables don't generate `open_checkouts` rows. Instead the commit
-  hook decrements `items.quantity_on_hand` by `qty` inside the same
-  transaction. The value is allowed to go negative — the ledger is
-  authoritative, and a worker grabbing more than was recorded shouldn't
-  be blocked at the kiosk.
-
-## CSV import format
-
-Three importers, same response shape (per-row outcomes — see
-[API reference](api.md)). All available on **both binaries** (the
-kiosk's Admin → Import view and the controller's same view; managed
-kiosks see a read-only banner pointing to the controller). Each
-endpoint has a matching `/template` route that streams a starter CSV
-with header + example rows the importer round-trips cleanly.
+There are three importers, with the same response shape (per-row outcomes, see
+[API Reference](api.md)). All three are on **both binaries**: the kiosk node's
+Admin → Import view and the controller's same view. A managed kiosk node shows
+a read-only banner that points to the controller. Each endpoint has a matching
+`/template` route. It streams a starter CSV with a header and example rows that
+the importer reads back cleanly.
 
 Common rules:
 
-- Empty cells are nulls. `active` accepts `true|false|1|0|yes|no|y|n`.
-- Rows match existing records by `code` (upsert). Records not in the
-  CSV are left alone — the importer never deletes.
-- Per-row validation. A bad row records an error but doesn't abort the
-  rest of the batch.
-- Dry-run (`dry_run=true`) is read-only: one snapshot read, no writes,
-  and the response classifies every row as `insert` or `update` based
-  on the diff against current DB state.
+- An empty cell is null. `active` accepts `true|false|1|0|yes|no|y|n`.
+- Rows match existing records by `code` (upsert). The importer leaves records
+  that are not in the CSV alone. It never deletes.
+- Validation is per row. A bad row records an error and the rest of the batch
+  continues.
+- A dry run (`dry_run=true`) is read-only: one snapshot read and no writes. The
+  response classifies every row as `insert` or `update`, from the diff against
+  the current database.
 
-### Items — `POST /api/kiosk/items/import`
+### Items: `POST /api/kiosk/items/import`
 
-```csv
+```text
 code,name,type,unit,tracking_mode,category,active,notes,quantity_on_hand,reorder_threshold
 DR-IMPACT-042,Impact Driver,tool,each,serialized,Power Tools,true,,,0
 SCREW-DECK-3IN,Deck Screws 3in,consumable,box of 100,quantity,Fasteners,true,,25,5
 ```
 
-`quantity_on_hand` and `reorder_threshold` are optional; if omitted,
-existing rows keep their current values and new rows default to zero.
-For **serialized** rows a `quantity_on_hand` value is ignored (the count
-is derived from non-retired instances); `reorder_threshold` still applies.
-Per-unit serials and RFID EPCs live on `item_instances`, not on the SKU
-row — serialized SKUs created via CSV still need their instances added
-through the admin UI's instances panel, which is what drives their
-derived quantity.
+`quantity_on_hand` and `reorder_threshold` are optional. If you leave them
+out, existing rows keep their values and new rows default to zero.
 
-### Workers — `POST /api/kiosk/users/import`
+- For a **serialized** row the importer ignores `quantity_on_hand`, because
+  the count is derived from non-retired instances. `reorder_threshold` still
+  applies.
+- Per-unit serials and RFID EPCs live on `item_instances`, not on the SKU row.
+  A serialized SKU created by CSV still needs its instances, added in the admin
+  UI's instances panel. They drive its derived quantity.
 
-```csv
+### Workers: `POST /api/kiosk/users/import`
+
+```text
 code,name,email,role,group,active
 WORKER-1,Alice,alice@example.com,worker,electrical,true
 FOREMAN-1,Sam,sam@example.com,foreman,electrical,true
 ```
 
-`role` defaults to `worker`. `group` is the group's **code** (not id);
-unknown codes are auto-created on real-run with `code=name=value` and
-`active=true`, which admins enrich with contact metadata via the Groups
-admin view. Dry-run does *not* auto-create groups — the side effect
-kicks in only on actual import.
+- `role` defaults to `worker`.
+- `group` is the group's **code**, not its id.
+- On a real run, the importer creates an unknown group code with
+  `code=name=value` and `active=true`. Admins add the contact details later in
+  the Groups admin view.
+- A dry run does *not* create groups. The side effect happens only on a real
+  import.
 
-### Groups — `POST /api/kiosk/groups/import`
+### Groups: `POST /api/kiosk/groups/import`
 
-```csv
+```text
 code,name,contact_email,contact_phone,notes,active
 electrical,Electrical Crew,lead@example.com,+1-555-0100,Morning shift,true
 ```
 
-Useful for back-filling contact metadata on groups that were
-auto-created by a workers import.
+Use it to fill in contact details on groups that a workers import created.
+
+---
+
+## 10. Where to Go Next
+
+- How commit, returns and admin closes write these tables: [Ledger](ledger.md)
+- Routes, including the CSV importers: [API Reference](api.md)
+- RFID and the `rfid_epc` and `enclosure_id` fields: [RFID](rfid.md)
+- Templates, recipients and the send log: [Notifications](notifications.md)
+- The fleet side and its projections: [Controller](controller.md)
+- The system overview: [Overview](overview.md)

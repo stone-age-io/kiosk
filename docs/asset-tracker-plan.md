@@ -123,7 +123,7 @@ capability and land together. Not one mega-diff.
 - `rfid_read_trigger.go`: enclosure_diff observed-event key `door_id`→`enclosure_id`.
 - `config.go`: `RFID.DoorID` (yaml `door_id`, env `KIOSK_RFID_DOOR_ID`) → `RFID.EnclosureID`;
   keep "required when mode=enclosure_diff".
-- Docs: rfid.md, wire.md, kiosk.yaml.example, configuration.md.
+- Docs: rfid.md, protocol.md, kiosk.yaml.example, configuration.md.
 
 **Decision D5 (revised):** two columns. `terminal_id` (the interacting/accepting screen —
 always present) + `enclosure_id` (the cabinet — set for `enclosure_diff`). For

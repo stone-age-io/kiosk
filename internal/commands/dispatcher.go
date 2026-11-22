@@ -12,7 +12,7 @@
 // inventory.snapshot (read-only). Add new commands by registering a Handler
 // against a suffix string.
 //
-// Wire reference: docs/wire.md — payload/reply shapes per command.
+// Wire reference: docs/protocol.md — payload/reply shapes per command.
 package commands
 
 import (

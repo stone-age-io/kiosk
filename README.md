@@ -1,177 +1,124 @@
-# Tool/Consumable Checkout Kiosk
+# Tool and Consumable Checkout Kiosk
 
-A self-service checkout kiosk for tool cribs and consumable storerooms.
-A worker walks up to a touchscreen, scans their badge, scans items,
-confirms a cart, and walks away. The same flow handles checkouts,
-returns, and consumable grabs in one transaction.
+The kiosk is a self-service checkout station for tool cribs and consumable
+storerooms. It is an application on the [Stone-Age.io](https://stone-age.io)
+platform. A worker scans a badge at a touchscreen, scans items, confirms the
+cart and walks away. One transaction holds checkouts, returns and consumable
+use together. Each binary embeds PocketBase and serves a Vue 3 SPA from the
+same process, so there is no separate API server or database to run. To
+deploy a kiosk node, copy one file: `scp kiosk-app pi@kiosk:/opt/kiosk/`.
 
-The whole thing is one Go binary that embeds PocketBase and serves a
-Vue 3 SPA from the same process. There's no separate API server, no
-separate database, no external dependencies at runtime.
-`scp kiosk-app pi@kiosk:/opt/kiosk/` is the entire deploy story.
+---
 
-For multi-kiosk deployments there's an optional **kiosk-controller**
-sibling binary that distributes catalog down to managed kiosks over
-NATS JetStream KV and aggregates their transaction events into a
-central ledger. Standalone kiosks ignore it; managed kiosks point at
-it via config. See [docs/controller.md](docs/controller.md).
+## Three Binaries
 
-## What you get
+The system is three programs. They share code, but at run time they talk
+only over NATS.
 
-- **One binary.** Go + embedded PocketBase + SQLite + built Vue SPA.
-  ~40 MB.
-- **Edge-only.** Each kiosk is autonomous. No central server required.
-  No internet needed for normal operation; an optional NATS publisher
-  can feed events to a central consumer when one is reachable.
-- **Two auth populations.** Workers identify by badge scan (no login).
-  Admins log in with email + password to manage items, workers,
-  imports, and reports.
-- **Append-only ledger.** Transactions are immutable after commit. The
-  `open_checkouts` table is a materialized view rebuildable from the
-  ledger (integrity diff + one-click rebuild from the admin Reports
-  view).
-- **Stock tracking with audit trail.** Items carry `quantity_on_hand`
-  and `reorder_threshold`. Consumables decrement automatically on
-  `consume`; for quantity-tracked tools and consumables, admin edits go
-  through an `/adjust` endpoint that writes a `stock_adjustments` audit
-  row in the same transaction as the item update. A Low Stock report
-  surfaces items at or below threshold.
-- **Per-unit tracking for serialized tools.** One `items` row is the
-  SKU; one `item_instances` row is the physical unit (its scannable
-  barcode, printed serial, RFID tag). Returns close the exact instance
-  scanned, so three impact drivers under one SKU don't blur together.
-  A serialized SKU's `quantity_on_hand` is **derived** — it tracks the
-  count of non-retired instances (in service + maintenance) automatically
-  as units move through their lifecycle (added, sent to maintenance,
-  returned to service, retired, un-retired) — so it isn't directly
-  adjustable (the `/adjust` endpoint rejects serialized items).
-- **Maintenance mode for serialized units.** Each unit carries a
-  lifecycle `status` (`in_service` / `maintenance` / `retired`).
-  Returned tools can be parked in maintenance — automatically per-SKU
-  (`requires_maintenance_on_return`) or via a per-return "needs
-  maintenance" toggle any worker can flip — where they still count as
-  on-hand but aren't available to check out until an admin returns them
-  to service. Units are never deleted; they retire (reversibly). Entry
-  fires a batched one-per-transaction email alert, and a scheduled
-  "items in maintenance" digest is available.
-- **Optional RFID flows.** A networked LLRP reader (Impinj R700 or
-  similar) drives either of two modes: **`counter_scan`** turns the
-  reader into a bulk barcode-gun equivalent — operator hits "RFID
-  scan" on the checkout view and every observed EPC folds into the
-  cart; **`enclosure_diff`** is NATS-driven for smart-cabinet /
-  locker installs — an access-control event publishes `cart.start`,
-  a camera/occupancy event publishes `read.trigger`, the kiosk
-  reconciles what's still in vs. what left and synthesizes the
-  resulting cart lines. Worker confirms on a normal checkout screen.
-  See [RFID](docs/rfid.md).
-- **Optional asset location (advisory).** RFID/BLE gateways around the
-  site — **external publishers** that put a normalized sighting onto NATS,
-  configured and run outside the platform — give each tracked unit a coarse
-  "last seen" zone (or GPS for a roaming gateway). Custody reads double as
-  sightings for free. It's lossy, last-write-wins, and **never** gates a
-  checkout. The payoff is **reconciliation**: "checked out to Bob but last
-  seen in Cabinet A" / "out but not seen in 3 days" / "seen leaving the yard
-  with no checkout." See [Location & Sightings](docs/location-sightings-plan.md).
-- **Optional timeclock with tool interlocks.** Workers clock in/out at
-  the kiosk (splash-screen "Time clock" button + badge scan) against an
-  append-only `time_punches` ledger — same discipline as the tool
-  ledger: punches are never edited or deleted, corrections are new
-  punches with a reason, and "who's clocked in" is derived from the
-  latest punch. Two config-gated interlocks tie the ledgers together:
-  `require_clock_in_for_checkout` (no checkout/consume unless clocked
-  in — **returns are always allowed**, and the checkout screen offers a
-  one-tap "clock in now?" instead of a dead end) and
-  `block_clock_out_with_open_checkouts` (can't clock out while holding
-  tools; the screen lists exactly what to return and at which building).
-  Foremen can punch crew members in their group (punch-now only); admins
-  can backdate corrections (reason required) and force a clock-out past
-  the open-tools block — the escape hatch for a worker who drove home
-  with a tool. In managed mode punches flow to the controller and per-user
-  clocked-in state is distributed back to every kiosk, so **clocking in
-  at one kiosk and out at another just works** (eventually consistent:
-  if a kiosk's replica is briefly stale it rejects the punch until sync
-  catches up — an admin punch is the override). The open-tools block is
-  **fleet-wide** in managed mode too: a tool out at kiosk A blocks a
-  clock-out at kiosk B (and on the phone terminal), each blocked row
-  tagged with the building to return it to. It's **fail-open** — a stale
-  or unavailable replica allows the clock-out rather than stranding the
-  worker — and a worker can acknowledge ("clock out anyway") to proceed
-  rather than being hard-blocked. Standalone kiosks keep a local-only
-  ledger and block on local tools only.
-  Workers can tag a clock-in with an optional **job / work-order number**
-  (free text — no job list to maintain); it rides the punch, shows on the
-  paired interval, and gets its own column in the export so hours can be
-  pivoted by job downstream. Reporting shows paired intervals and daily
-  totals for humans, but the **raw-punch CSV export is the payroll
-  contract** — no rounding, overtime, or pay-period logic lives in the
-  kiosk; downstream systems interpret. A scheduled timeclock digest emails
-  daily totals.
-  `timeclock_only: true` turns a device into a **dedicated punch
-  station**: the checkout splash is replaced by a persistent punch panel
-  and badge scans go straight to it — no carts, no checkout. The natural
-  pairing is a cheap gate device in a managed fleet: workers punch at the
-  gate, and the tool-crib kiosk's `require_clock_in_for_checkout`
-  interlock sees them as clocked in via the distributed punch state.
-  (Note: a punch-only station writes no checkouts of its own, but in
-  managed mode `block_clock_out_with_open_checkouts` still blocks on the
-  worker's fleet-wide open tools; standalone it's a no-op.)
-- **Virtual timeclock terminal (no hardware).** A separate binary
-  (`cmd/timeclock`) serves a per-user-**authenticated** self-service
-  punch page so workers can clock in/out **from their phones** — no badge
-  scanner, no physical station. The trust model is inverted from a kiosk:
-  instead of trusting the box, each worker signs in (PocketBase **OAuth2
-  SSO** and/or **password**) and the server reads the punched identity from
-  the session, never the request — a worker can only punch their own clock.
-  It's just another kiosk under the hood (writes the same `time_punches`
-  ledger, rides the same `punch_state` replica) and supports the **same
-  three modes** as `cmd/kiosk` (standalone, standalone + NATS events,
-  controller-managed). Security is by construction: the binary registers
-  **only** the authed `/api/self/timeclock/*` surface — none of the
-  anonymous checkout endpoints exist in it — and OAuth2 is locked
-  **match-only** so an IdP account with no pre-provisioned worker can't
-  self-enroll. See [Virtual timeclock terminal](#virtual-timeclock-terminal).
-- **Federation-ready.** Every transaction is stamped with `kiosk_code`
-  and `location_code` (and optional `terminal_id` / `enclosure_id` — see below). Every
-  state change flows through `events.Publish`, which always logs via
-  slog and (when enabled) also publishes to NATS — same subjects, no
-  caller changes.
-- **Multi-terminal per kiosk.** One binary can drive several
-  touchscreens on an isolated LAN (e.g. two doors of a building, an
-  inside + outside screen at each) — one process, one SQLite DB, one
-  shared inventory. Point each terminal's browser at the server with a
-  `?terminal=` URL param and that value is stamped onto the transaction at
-  commit (`transactions.terminal_id`), so a single shared inventory keeps
-  per-terminal attribution. `terminal_id` is optional and purely descriptive —
-  empty on a normal single-screen kiosk, and never an auth boundary
-  (the isolated network is the trust boundary, as with any kiosk). An RFID
-  enclosure_diff cart additionally records its cabinet as
-  `transactions.enclosure_id`. When a node also hosts more than one RFID
-  reader (e.g. two crib windows), each screen adds a `?reader=<reader_id>`
-  param so its "RFID scan" button fires that reader; a single-reader node
-  needs no param. All of this stays invisible at N=1 — one screen, one
-  reader, no URL params.
-- **Optional central controller.** A `kiosk-controller` binary
-  aggregates per-kiosk transaction events into its own ledger via a
-  JetStream durable consumer, pushes catalog updates down to managed
-  kiosks via JetStream KV (membership-driven, namespaced keys), drives
-  admin commands over core NATS request/reply, tracks live online
-  status via 45 s heartbeats, and centralizes email notifications
-  against a single SMTP + audit trail. See
-  [docs/controller.md](docs/controller.md) and
-  [docs/notifications.md](docs/notifications.md).
-- **Fleet-wide reporting.** On the controller, the Reports view
-  exposes seven tabs: currently-out, aging, low-stock (live snapshot
-  fan-out — one NATS round-trip per online kiosk), group activity,
-  recent transactions, adjustment audit (projected from
-  `inventory.adjust` events), and notifications deliverability.
-  Standalone kiosks share the same Reports surface against their
-  local data minus the controller-only tabs. Every tab has a
-  server-side **Export CSV** affordance that respects the on-screen
-  filters.
+| | `kiosk-app` | `kiosk-controller` | `kiosk-timeclock` |
+| :--- | :--- | :--- | :--- |
+| **Built from** | `cmd/kiosk` | `cmd/controller` | `cmd/timeclock` |
+| **Runs** | Once per kiosk node, on a mini-PC beside the touchscreen | Optional. Once per fleet, centrally | Optional. Where workers can reach it from their phones |
+| **Is** | The kiosk node: the checkout flow, the admin UI and the local custody ledger | The fleet hub: catalog distribution, the central ledger, fleet reports and central email | The timeclock terminal: a self-service punch page |
+| **Who signs in** | Admins. Workers scan a badge and do not sign in | Admins | Every worker, with OAuth2 SSO or a password |
+| **Config** | `kiosk.yaml` | `controller.yaml` | `timeclock.yaml` |
+| **Data** | `pb_data/` | `pb_data_controller/` | `pb_data_timeclock/` |
+| **Page** | [Overview](docs/overview.md) | [Central Controller](docs/controller.md) | [Configuration](docs/configuration.md) and [Operations](docs/operations.md) |
+
+Each kiosk node is the only authority over its own custody ledger. The
+controller aggregates and distributes, and it owns nothing authoritative. A
+kiosk node never waits on it. [Wire Protocol](docs/protocol.md) is the whole NATS
+contract between the binaries.
+
+---
+
+## What It Does
+
+- **Edge first.** Each kiosk node works alone. It needs no central server, and
+  no internet for normal operation. An optional NATS publisher sends its events to a central consumer
+  when one is reachable. A kiosk node is one binary of about 40 MB: Go,
+  embedded PocketBase and SQLite, and the built Vue SPA.
+- **Two kinds of user.** Workers identify with a badge scan and never sign in.
+  Admins sign in with email and password to manage items, workers, imports and
+  reports.
+- **Append-only ledger.** A transaction does not change after commit. The
+  `open_checkouts` table is a materialized view that the kiosk node can
+  rebuild from the ledger. The admin Reports view shows an integrity diff and
+  has a one-click rebuild. See [Ledger](docs/ledger.md).
+- **Stock with an audit trail.** Items carry `quantity_on_hand` and
+  `reorder_threshold`, and a consume decrements the count. An admin changes the
+  count of a quantity-tracked tool or consumable through the `/adjust`
+  endpoint, which writes a `stock_adjustments` row in the same transaction. A
+  Low Stock report shows the items at or below their threshold.
+- **Serialized units.** One `items` row is the SKU. One `item_instances` row
+  is a physical unit, with its own barcode, printed serial and RFID tag. A
+  return closes the exact unit that was scanned. A serialized SKU's
+  `quantity_on_hand` is derived from its non-retired units, so `/adjust`
+  rejects it. See [Schema](docs/schema.md).
+- **Maintenance for serialized units.** Each unit has a `status`:
+  `in_service`, `maintenance` or `retired`. A returned unit goes to
+  maintenance by SKU policy (`requires_maintenance_on_return`) or by a
+  per-return toggle that any worker can set. There it counts as on hand, but
+  nobody can check it out until an admin returns it to service. Units retire
+  reversibly and are never deleted. Entry to maintenance sends one email alert
+  per transaction, and a scheduled "items in maintenance" digest is available.
+- **Optional RFID.** A networked LLRP reader (Impinj R700 or similar) runs in
+  one of two modes. `counter_scan` acts as a bulk barcode gun: the operator
+  taps "RFID scan" and every tag read goes into the cart. `enclosure_diff`
+  serves a smart cabinet over NATS. The kiosk node compares what is still
+  inside with what left, and proposes the cart for the worker to confirm. See
+  [RFID](docs/rfid.md).
+- **Optional asset location (advisory).** RFID and BLE gateways around the
+  site publish sightings onto NATS. They are external publishers, configured
+  and run outside the platform. Each tracked unit gets a coarse "last seen"
+  zone or a GPS position, and a custody read counts as a sighting too.
+  Location is lossy, last-write-wins and never gates a checkout. It feeds
+  reconciliation, such as "checked out to Bob but last seen in Cabinet A". See
+  [Location & Sightings](docs/location-sightings-plan.md).
+- **Optional timeclock with tool interlocks.** Workers clock in and out at the
+  kiosk against an append-only `time_punches` ledger. `timeclock_only: true`
+  makes a device a dedicated punch station. Two interlocks tie the clock to
+  the tool ledger: `require_clock_in_for_checkout` (returns are always allowed)
+  and `block_clock_out_with_open_checkouts`. In managed mode a worker can clock
+  in at one kiosk node and out at another, and the open-tools block covers the
+  whole fleet. The raw-punch CSV export is the payroll contract. See
+  [Configuration](docs/configuration.md).
+- **Timeclock terminal.** `kiosk-timeclock` serves a punch page that workers
+  open on their phones, with no badge scanner. Each worker signs in, and the
+  server reads the identity from the session, never from the request. The
+  binary has only the authenticated `/api/self/timeclock/*` surface. See
+  [Timeclock Terminal](#timeclock-terminal).
+- **Several terminals on one kiosk node.** One process can drive several
+  touchscreens on an isolated LAN, with one SQLite database and one inventory.
+  Each terminal's browser adds `?terminal=` to the URL, and the commit stamps
+  that value on `transactions.terminal_id`. The value is descriptive only and
+  never an auth boundary. A kiosk node with more than one RFID reader also
+  adds `?reader={reader_id}` per screen. One screen with one reader needs
+  neither parameter.
+- **Ready for a fleet.** Every transaction carries `kiosk_code` and
+  `location_code`, and optionally `terminal_id` and `enclosure_id`. Every state
+  change goes through `events.Publish`, which always logs through slog. When
+  NATS is enabled, it also publishes to NATS, with no change for the caller.
+- **Optional central controller.** `kiosk-controller` aggregates the
+  transaction events of each kiosk node into its own ledger through a
+  JetStream durable consumer. It pushes the catalog to managed kiosk nodes
+  through JetStream KV, with membership deciding which items each node gets.
+  It sends admin commands over core NATS request and reply, and tracks online
+  status from 45 s heartbeats. It sends all email from one SMTP account, with
+  one audit trail. See
+  [Central Controller](docs/controller.md) and
+  [Notifications](docs/notifications.md).
+- **Fleet-wide reports.** The controller's Reports view has seven tabs:
+  currently out, aging, low stock, group activity, recent transactions,
+  adjustment audit and notification deliverability. A standalone kiosk node
+  has the same view over its local data, without the controller-only tabs.
+  Every tab has a server-side Export CSV that respects the filters on screen.
+
+---
 
 ## Architecture
 
-```
+```text
 ┌─────────────────────────────────────────────────┐
 │              Mini-PC / Touchscreen              │
 │                                                 │
@@ -187,91 +134,115 @@ it via config. See [docs/controller.md](docs/controller.md).
 └─────────────────────────────────────────────────┘
 ```
 
-The barcode scanner is a USB HID keyboard. The browser captures
-keystrokes via a window-level listener that buffers characters and
-dispatches on Enter. Same mechanism reads user QR codes and item
-barcodes; the dispatcher disambiguates by configurable prefix or by
-trying instance code → item code → instance RFID → instance BLE → user
-code. RFID and BLE are instance-only — EPCs and beacon ids are per-tag and
-live on `item_instances` (`rfid_epc` / `ble_id`), never on the SKU.
+The barcode scanner is a USB HID keyboard. A window-level listener in the
+browser buffers the keystrokes and dispatches on Enter. The same path reads
+badge QR codes and item barcodes. When a configured prefix matches, the prefix
+decides the type. Otherwise the resolver tries these lookups in order:
 
-## Tech stack
+1. Instance code
+2. Item code
+3. Instance RFID EPC
+4. Instance BLE id
+5. User code
+
+EPCs and beacon ids belong to one tag each. So they live on `item_instances`
+(`rfid_epc`, `ble_id`) and never on the SKU.
+
+---
+
+## Tech Stack
 
 | Layer | Choice |
-|---|---|
-| Server | Go 1.27 (single binary) |
+| :--- | :--- |
+| Server | Go 1.27, one binary per program |
 | Database | PocketBase 0.41 + SQLite (file at `pb_data/data.db`) |
-| Migrations | Schema-as-code in Go (`migrations/*.go`), run on startup |
-| Config | YAML + `KIOSK_*` env-var overrides |
+| Migrations | Schema as code in Go (`migrations/*.go`), applied at startup |
+| Config | YAML + `KIOSK_*` environment overrides |
 | Frontend | Vue 3 (Composition API, `<script setup>`) + TypeScript |
 | State | Pinia |
 | Routing | Vue Router |
 | Styling | Tailwind 4 |
 | Headless components | Reka UI (accessibility primitives) |
-| Build | Vite 6 → `internal/ui/dist/` → `//go:embed` into Go binary |
-| API client | PocketBase JS SDK 0.21 (admin CRUD); plain `fetch` (kiosk flow) |
-| Messaging | NATS JetStream (optional) — durable streams for event aggregation, KV buckets for catalog distribution |
+| Maps | Leaflet + MapLibre GL |
+| Build | Vite 8 → `internal/ui/dist/` → `//go:embed` into each binary |
+| API client | PocketBase JS SDK 0.27 (admin CRUD), plain `fetch` (kiosk flow) |
+| Messaging | NATS JetStream (optional): durable streams for event aggregation, KV buckets for catalog distribution |
+| RFID | LLRP through `edgexfoundry/device-rfid-llrp-go` (optional) |
 
-## Project layout
+---
 
-```
+## Layout
+
+```text
 kiosk/
 ├── cmd/
-│   ├── kiosk/main.go            Kiosk: PB bootstrap, config, NATS, routes, watcher
-│   ├── controller/main.go       Controller: PB bootstrap, JetStream consumer + KV publisher
-│   └── timeclock/main.go        Virtual timeclock terminal: authed self-service punch surface only
+│   ├── kiosk/              Kiosk node: PocketBase bootstrap, config, NATS, routes, watchers
+│   ├── controller/         Controller: PocketBase bootstrap, JetStream consumer, KV publisher
+│   └── timeclock/          Timeclock terminal: the authenticated self-service punch surface only
 ├── internal/
-│   ├── cart/                    In-memory cart store + tests
-│   ├── catalog/                 Cross-fleet payload shape; kiosk-side KV watcher + projector + tests
-│   ├── commands/                Kiosk-side NATS command dispatcher; inventory.adjust + inventory.snapshot handlers + tests
-│   ├── commit/                  Cart-to-transaction orchestrator + tests
-│   ├── config/                  YAML loader + env overrides (shared between binaries)
-│   ├── controller/              Controller-side aggregator, catalog publisher, membership helpers, heartbeat registry, inventory command endpoints, seed-catalog subcommand + tests
-│   ├── dberr/                   Tiny shared helpers: IsNotFound, IsUniqueViolation
-│   ├── events/                  Publish() + NATS publisher + JetStream/Conn accessors + tests
-│   ├── handlers/                HTTP handlers for /api/kiosk/* + tests
-│   ├── heartbeat/               Kiosk-side periodic heartbeat goroutine
-│   ├── kioskctx/                Process-global kiosk identity
-│   └── scan/                    Scan resolver + tests
-├── migrations/                  Schema-as-code; runs on startup
-│   └── timeclock/               cmd/timeclock-only: enables worker auth on the users collection
-├── ui/                          Vue 3 SPA source (Vite project)
-├── pb_data/                     Kiosk SQLite (gitignored, created on first run)
-├── pb_data_controller/          Controller SQLite (gitignored; controller binary uses this)
-├── pb_data_timeclock/           Virtual timeclock terminal SQLite (gitignored)
-├── internal/ui/                 //go:embed seam: dist/ holds the Vite output, embedded into both binaries at build time
-├── branding/                    Optional on-disk branding overrides (logo, custom CSS) — sit next to the binary, not embedded
-├── kiosk.yaml                   Kiosk config (gitignored)
-├── kiosk.yaml.example           Kiosk config template
-├── controller.yaml.example      Controller config template
-├── timeclock.yaml.example       Virtual timeclock terminal config template
-└── go.mod, go.sum
+│   ├── cart/               In-memory cart store
+│   ├── cartevents/         "This cart changed" broker for SSE subscribers
+│   ├── catalog/            Catalog wire shape, kiosk-side KV watcher and projector
+│   ├── commands/           Kiosk-side handlers for controller commands over NATS
+│   ├── commit/             Cart-to-transaction orchestrator
+│   ├── config/             YAML loader and env overrides, shared by every binary
+│   ├── controller/         Aggregator, catalog publisher, membership, heartbeat registry, inventory commands
+│   ├── csvimport/          Row validation and diff for the CSV imports, shared by kiosk and controller
+│   ├── dberr/              Small shared helpers: IsNotFound, IsUniqueViolation
+│   ├── demoseed/           The Northwind Traders demo estate
+│   ├── events/             Publish(), the NATS publisher, JetStream and connection accessors
+│   ├── exports/            CSV writers for items and transactions
+│   ├── handlers/           HTTP handlers for /api/kiosk/* and /api/self/timeclock/*
+│   ├── heartbeat/          Kiosk-side heartbeat goroutine
+│   ├── instances/          item_instances hooks: audit rows and lifecycle events
+│   ├── kioskctx/           Process-global kiosk identity
+│   ├── ledger/             Ledger replay for integrity checks and rebuilds
+│   ├── metrics/            Point-in-time operational snapshot of one kiosk node
+│   ├── notifications/      Transactional email rendering and dispatch
+│   ├── readiness/          GET /api/ready for each binary
+│   ├── reconcile/          Custody-vs-location discrepancies
+│   ├── rfid/               LLRP reader wrapper
+│   ├── scan/               Scan resolver
+│   ├── scheduler/          Scheduled reports on PocketBase's cron
+│   ├── sightings/          Advisory "last observed" state for serialized units
+│   ├── timeclock/          The punch funnel and derived clocked-in state
+│   └── ui/                 //go:embed seam: dist/ holds the Vite output
+├── migrations/             Schema as code, applied at startup
+│   ├── controller/         Controller-only collections
+│   └── timeclock/          Timeclock terminal only: worker auth on the users collection
+├── contract/               Thing Types, operations and NATS roles for the platform
+├── ui/                     Vue 3 SPA source (Vite project)
+├── branding/               Optional on-disk branding overrides, next to the binary, not embedded
+├── demo/                   Demo config
+├── kiosk.yaml.example      Kiosk node config template
+├── controller.yaml.example Controller config template
+└── timeclock.yaml.example  Timeclock terminal config template
 ```
 
-## Quick start
+`pb_data/`, `pb_data_controller/`, `pb_data_timeclock/`, `internal/ui/dist/`
+and the `*.yaml` config files are gitignored. Each binary creates its data
+directory on first run.
 
-```powershell
-# 1. Clone, then from the project root:
+---
+
+## Build and Run
+
+You must build the SPA before the Go binary. `//go:embed` fails on an empty
+`internal/ui/dist/`.
+
+```bash
 go mod download
-
-# 2. Build the SPA — emits to internal/ui/dist/, which is embedded into the Go binary
 npm install --prefix ui
-npm run build --prefix ui
-
-# 3. Build the Go binary (must run step 2 first — //go:embed will fail on an empty dist/)
-go build -o kiosk-app.exe ./cmd/kiosk     # on Linux/Mac: go build -o kiosk-app ./cmd/kiosk
-
-# 4. Copy and customize the config
-cp kiosk.yaml.example kiosk.yaml          # edit kiosk.code / location_code
-
-# 5. Run
-.\kiosk-app.exe                            # ./kiosk-app on Linux/Mac
+npm run build --prefix ui           # writes internal/ui/dist/
+go build -o kiosk-app ./cmd/kiosk   # Windows: go build -o kiosk-app.exe ./cmd/kiosk
+cp kiosk.yaml.example kiosk.yaml    # edit kiosk.code and location_code
+./kiosk-app                         # Windows: .\kiosk-app.exe
 ```
 
-On first boot the migration creates all collections and seeds one
-bootstrap admin. The credentials are printed **once** to stdout:
+On first boot the migration creates all collections and one bootstrap admin.
+The binary prints the credentials to stdout **once**:
 
-```
+```text
 ================================================================
  BOOTSTRAP ADMIN CREDENTIALS — shown once, save them now
 ----------------------------------------------------------------
@@ -282,127 +253,112 @@ bootstrap admin. The credentials are printed **once** to stdout:
 ================================================================
 ```
 
-Save the password. If you miss it, you can reset it via the PocketBase
-superuser UI at `http://localhost:8090/_/` (you'll be prompted to
-create a superuser the first time you visit).
+::: note Save the password
+If you lose it, reset it in the PocketBase superuser UI at
+`http://localhost:8090/_/`. The first visit asks you to create a superuser.
+:::
 
-Open `http://localhost:8090/`:
+Open `http://localhost:8090/`. It shows the checkout flow ("Scan your badge to
+begin"). The small **Admin** link at the top right opens `/admin/login`.
 
-- The kiosk checkout flow ("Scan your badge to begin").
-- Top-right header has a tiny **Admin** link → `/admin/login`.
+The controller builds the same way, with `go build -o kiosk-controller
+./cmd/controller`, and reads `controller.yaml`. See
+[Central Controller](docs/controller.md). Dev loops, database reset and tests
+are in [Development](docs/development.md).
 
-## Virtual timeclock terminal
+### Timeclock Terminal
 
-The `cmd/timeclock` binary is a publicly-reachable, per-user-authenticated
-self-service punch terminal — workers clock in/out from their phones, no
-badge scanner or dedicated station. It shares the entire timeclock stack
-with `cmd/kiosk` (the `PerformPunch` funnel, the `time_punches` ledger, the
-`punch_state` fleet replica, the payroll CSV) and adds exactly one thing:
-authentication. The worker signs in and the server reads the punched
-identity from the session — never from the request body — so a worker can
-only ever punch their own clock.
+`kiosk-timeclock` shares the timeclock code of a kiosk node: the
+`timeclock.PerformPunch` funnel, the `time_punches` ledger, the `punch_state`
+replica and the payroll CSV. It uses the same SPA build. Then:
 
-```powershell
-# Same SPA build as the kiosk (step 2 above), then:
-go build -o kiosk-timeclock.exe ./cmd/timeclock   # ./kiosk-timeclock on Linux/Mac
-cp timeclock.yaml.example timeclock.yaml           # edit kiosk.code, auth, mode
-KIOSK_CONFIG=timeclock.yaml .\kiosk-timeclock.exe  # serves the same port surface
+```bash
+go build -o kiosk-timeclock ./cmd/timeclock   # Windows: kiosk-timeclock.exe
+cp timeclock.yaml.example timeclock.yaml      # edit kiosk.code, auth, mode
+KIOSK_CONFIG=timeclock.yaml ./kiosk-timeclock
 ```
 
-**Why a separate binary.** The kiosk's `/api/kiosk/*` surface is anonymous
-by design (the box on a trusted LAN is the trust boundary). You can't safely
-expose that to the internet, and putting auth *in front* of it secures
-nothing — those handlers trust `user_code` from the body. So the timeclock
-binary registers **only** the authenticated `/api/self/timeclock/*` surface
-(plus identity/branding and an admin user-import for standalone
-provisioning). The dangerous checkout/cart/inventory routes are never wired
-into this process, so a config slip can't expose them — security by
-construction, the same posture as `cmd/controller` having no kiosk handlers.
+It is a separate binary because the kiosk's `/api/kiosk/*` surface is
+anonymous by design. Those handlers trust the `user_code` in the request body,
+so auth in front of them secures nothing. The timeclock binary registers only
+the authenticated `/api/self/timeclock/*` surface, identity and branding, and
+an admin user import. The checkout, cart and inventory routes do not exist in
+it, so a config error cannot expose them.
 
-**Authentication.** Workers authenticate against the `users` collection,
-which a `cmd/timeclock`-only migration turns into a real auth surface
-(`AuthRule = "active = true"`, OAuth2 enabled). Two paths:
+It supports the same three modes as a kiosk node: standalone, standalone with
+NATS events, and controller-managed. In managed mode a worker who clocked in at
+a kiosk node can clock out from a phone.
 
-- **OAuth2 SSO** (recommended): configure your IdP's client id/secret at
-  deploy time in the superuser UI (`/_/` → Collections → `users` → Options →
-  OAuth2). Matching is by **email**, which the catalog already syncs, so no
-  payload change is needed. A runtime guard rejects any IdP account whose
-  email isn't a pre-provisioned worker (**match-only** — no self-enrollment).
-- **Password**: workers sign in by email. Because provisioning seeds a random
-  password nobody knows, they set one via the **reset-by-email** flow — which
-  needs SMTP configured (superuser UI → Settings → Mail).
+- [Configuration](docs/configuration.md): the `timeclock.yaml` keys and the
+  three modes.
+- [Operations](docs/operations.md): OAuth2 SSO, password reset through SMTP,
+  worker provisioning, and hardening for a public host.
 
-**Three operating modes** (same as `cmd/kiosk`; only `timeclock.enabled` +
-`timeclock.virtual` are required):
+::: warning This is the binary you expose to the internet
+Terminate TLS in front of it, restrict the superuser UI (`/_/`) and enable
+PocketBase's auth rate limiter. Never expose `kiosk-app` this way.
+:::
 
-| Mode | `nats` / `controller` | Workers from | Clocked-in state |
-|------|------------------------|--------------|------------------|
-| standalone | both off | local (admin SPA / superuser / CSV) | local ledger |
-| standalone + NATS | nats on, controller off | local | local; punches emit events |
-| controller-managed | both on | catalog sync | fleet-wide via `punch_state` |
+---
 
-Managed mode is the one for a *public* terminal fronting a fleet:
-provisioning stays central on the controller, and a worker who clocked in at
-a physical kiosk can clock out from their phone.
+## Onboarding an Organization
 
-**Deploy hardening** (this is the one binary you point at the internet):
-terminate TLS in front of it (reverse proxy / Cloudflare Tunnel, or PB's
-`serve --https`); restrict the superuser UI (`/_/`) at the proxy/firewall;
-enable PocketBase's auth rate limiter. The `/admin` SPA and PB collections
-API are admins-only (same guard as every binary), but shrinking the
-reachable surface on a public host is good defense-in-depth.
-
-The **fleet-wide clock-out block** is what makes this terminal genuinely
-useful: although the phone holds no local checkouts, in managed mode it blocks
-a clock-out while the worker has tools out at *any* kiosk, names the building
-to return each to, and lets them acknowledge ("clock out anyway") to proceed.
-It's eventually consistent and fail-open — a stale or unreachable replica
-allows the punch rather than stranding the worker.
-
-## Onboarding an organization
-
-[`contract/`](contract/) holds what an organization needs on the platform: the
-Thing Types for kiosk nodes, timeclock terminals and the controller, their
+[`contract/`](contract/) holds what an organization needs on the platform:
+the Thing Types for kiosk nodes, timeclock terminals and the controller, their
 operations, and a NATS role for each. As an owner or admin of the
-organization, run `stone apply --template contract/`. It is safe to re-run,
-and running it again moves an organization to a newer contract.
+organization, run:
+
+```bash
+stone apply --template contract/
+```
+
+You can run it again. A new run moves the organization to a newer contract.
+
+---
 
 ## Releases
 
-Pushing a `v*` tag runs [the release workflow](.github/workflows/release.yml).
-goreleaser builds the SPA, then cross-compiles `kiosk-app`, `kiosk-controller`
-and `kiosk-timeclock` for Linux, macOS and Windows (amd64 and arm64; no Windows
-arm64), one archive per binary. The release body is the tag's section of
-[CHANGELOG.md](CHANGELOG.md), built by
-[`scripts/release-notes.sh`](scripts/release-notes.sh), which refuses an empty
-section. So promote `## [Unreleased]` to `## [X.Y.Z] - date` before tagging. A
-tag with a suffix (`v0.2.0-rc1`) reads `[Unreleased]` and publishes as a
-prerelease.
+A pushed `v*` tag runs [the release workflow](.github/workflows/release.yml).
+goreleaser builds the SPA. Then it cross-compiles `kiosk-app`,
+`kiosk-controller` and `kiosk-timeclock`, one archive per binary, for these
+targets:
+
+- Linux and macOS on amd64 and arm64
+- Windows on amd64 (there is no Windows arm64 build)
+
+The release body is the tag's section of [CHANGELOG.md](CHANGELOG.md).
+[`scripts/release-notes.sh`](scripts/release-notes.sh) builds it and refuses an
+empty section. So before you tag, change `## [Unreleased]` to
+`## [X.Y.Z] - date`. A tag with a suffix (`v0.2.0-rc1`) reads `[Unreleased]`
+and publishes as a prerelease.
+
+---
 
 ## Documentation
 
-The repo's deeper documentation lives under [`docs/`](docs/):
-
-- [Overview](docs/overview.md) — the high-level conceptual tour:
-  custody vs. location, the mental model, how the kiosk / controller /
-  timeclock programs fit together, and how a deployment grows. Start here.
-- [Configuration](docs/configuration.md) — YAML + env-var surface,
-  branding, custom CSS.
-- [Development](docs/development.md) — dev loops, DB reset, test suite.
-- [API reference](docs/api.md) — custom endpoints, collection rules.
-- [Wire reference](docs/wire.md) — every NATS subject (events,
-  commands, heartbeats, sightings) with payload and reply shapes.
-- [Schema](docs/schema.md) — collections, cardinality rules, CSV
+- **[Overview](docs/overview.md)**: custody and location, the mental model, how
+  the three binaries fit together and how a deployment grows. Start here.
+- **[Configuration](docs/configuration.md)**: the YAML and environment
+  variables, the timeclock, branding and custom CSS.
+- **[Development](docs/development.md)**: dev loops, database reset and the
+  test suite.
+- **[API Reference](docs/api.md)**: custom endpoints and collection rules.
+- **[Wire Protocol](docs/protocol.md)**: every NATS subject (events, commands,
+  heartbeats, sightings) with its payload and reply shapes.
+- **[Schema](docs/schema.md)**: collections, cardinality rules and the CSV
   import format.
-- [Operations](docs/operations.md) — deploy, backups, ledger integrity,
-  NATS failure modes, stock adjustments, instances, password reset.
-- [Troubleshooting](docs/troubleshooting.md) — common errors and fixes.
-- [Central controller](docs/controller.md) — multi-kiosk deployments.
-- [Notifications](docs/notifications.md) — receipts, low-stock alerts,
+- **[Ledger](docs/ledger.md)**: the append-only design and drift recovery.
+- **[Operations](docs/operations.md)**: deployment, backups, ledger integrity,
+  NATS failure modes, stock adjustments, instances, the timeclock terminal and
+  password reset.
+- **[Troubleshooting](docs/troubleshooting.md)**: common errors and their
+  fixes.
+- **[Central Controller](docs/controller.md)**: deployments with more than one
+  kiosk node.
+- **[Notifications](docs/notifications.md)**: receipts, low-stock alerts and
   scheduled digests.
-- [RFID](docs/rfid.md) — `counter_scan` and `enclosure_diff` modes,
-  LLRP reader integration, the SSE cart-events channel.
-- [Location & Sightings](docs/location-sightings-plan.md) — advisory asset
-  location from external gateways, the `sighting` family, and custody-vs-location
-  reconciliation.
-- [Shipped & roadmap](docs/roadmap.md) — what's live and what's deferred.
+- **[RFID](docs/rfid.md)**: the `counter_scan` and `enclosure_diff` modes, the
+  LLRP reader and the SSE cart-events channel.
+- **[Location & Sightings](docs/location-sightings-plan.md)**: advisory asset
+  location from external gateways, the `sighting` family, and reconciliation.
+- **[Shipped & Roadmap](docs/roadmap.md)**: what is live and what is deferred.

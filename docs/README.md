@@ -1,75 +1,86 @@
-# Docs
+# Kiosk Documentation
 
-Topic-by-topic documentation for the kiosk binary, the controller
-binary, and the operational surface around them. The repo-root
-[`README.md`](../README.md) is the feature-by-feature overview;
-everything more detailed lives here.
+This folder holds the topic pages for the kiosk node (`kiosk-app`), the
+controller (`kiosk-controller`) and the timeclock terminal
+(`kiosk-timeclock`). The repository's [README](../README.md) lists the
+features. Read [Overview](overview.md) first.
 
-## Start here
+---
 
-- [Overview](overview.md) — the conceptual tour: what the platform is,
-  the custody-vs-location idea, the mental model (node / terminal /
-  reader / enclosure / item / instance), how the three programs fit
-  together, and how a deployment grows. Read this first.
+## Start Here
 
-## Setup & operation
+- **[Overview](overview.md)**: custody and location, the mental model (kiosk
+  node, terminal, reader, enclosure, item, instance), how the three binaries
+  fit together and how a deployment grows.
 
-- [Configuration](configuration.md) — `kiosk.yaml` / `controller.yaml` /
-  `timeclock.yaml`, environment overrides, the timeclock block + interlocks,
-  the virtual timeclock terminal's three modes, branding and custom CSS.
-- [Development](development.md) — prerequisites, backend/frontend dev
-  loops, DB reset, running the Go test suite.
-- [Operations](operations.md) — deploying, backups, ledger integrity,
-  resync to controller, NATS failure modes, stock adjustments,
-  serialized instances, the virtual timeclock terminal (deploy, SSO/SMTP,
-  hardening), password reset.
-- [Troubleshooting](troubleshooting.md) — common errors and what they mean.
+---
+
+## Setup and Operation
+
+- **[Configuration](configuration.md)**: `kiosk.yaml`, `controller.yaml` and
+  `timeclock.yaml`, environment overrides, the timeclock and its interlocks,
+  the three modes of the timeclock terminal, branding and custom CSS.
+- **[Development](development.md)**: prerequisites, the backend and frontend
+  dev loops, database reset and the Go test suite.
+- **[Operations](operations.md)**: deployment, backups, ledger integrity,
+  resync to the controller, NATS failure modes, stock adjustments, serialized
+  instances, the timeclock terminal (deployment, SSO and SMTP, hardening) and
+  password reset.
+- **[Troubleshooting](troubleshooting.md)**: common errors and what they mean.
+
+---
 
 ## Reference
 
-- [API reference](api.md) — custom `/api/kiosk/*`, `/api/controller/*`, and
-  the virtual terminal's authed `/api/self/timeclock/*` endpoints, PocketBase
-  collection rules.
-- [Wire reference](wire.md) — every NATS subject (events, commands,
-  heartbeats) with payload and reply shapes. Read this if you're
-  integrating an external system with the kiosk over NATS.
-- [Schema](schema.md) — collections (incl. the `time_punches` ledger),
-  controller-only fields, the virtual-terminal-only worker-auth migration,
-  `open_checkouts` cardinality rules, CSV import format.
-- [Ledger](ledger.md) — append-only design, the single write path,
-  `open_checkouts` as a derived view, the controller's projected
-  ledger, drift recovery.
+- **[API Reference](api.md)**: the custom `/api/kiosk/*`, `/api/controller/*`
+  and `/api/self/timeclock/*` endpoints, and the PocketBase collection rules.
+- **[Wire Protocol](protocol.md)**: every NATS subject (events, commands,
+  heartbeats) with its payload and reply shapes. Read it to connect an
+  external system to the kiosk over NATS.
+- **[Schema](schema.md)**: the collections (the `time_punches` ledger
+  included), controller-only fields, the worker-auth migration of the
+  timeclock terminal, the `open_checkouts` cardinality rules and the CSV
+  import format.
+- **[Ledger](ledger.md)**: the append-only design, the single write path,
+  `open_checkouts` as a derived view, the controller's projected ledger and
+  drift recovery.
+
+---
 
 ## Subsystems
 
-- [Central controller (kiosk-controller)](controller.md) — multi-kiosk
-  deployments: catalog distribution, transaction aggregation,
-  heartbeat/online status, remote inventory commands, NATS provisioning.
-- [Notifications](notifications.md) — receipts, low-stock alerts,
-  scheduled digests; standalone vs managed mode dispatch.
-- [RFID](rfid.md) — Impinj R700 / LLRP integration with two
-  operational modes (`counter_scan` and `enclosure_diff`), the SSE
-  cart-events channel, and the `cart.start` / `read.trigger` NATS
-  command pair. USB HID badge readers are also covered.
+- **[Central Controller](controller.md)**: deployments with more than one
+  kiosk node. Catalog distribution, transaction aggregation, heartbeats and
+  online status, remote inventory commands and NATS provisioning.
+- **[Notifications](notifications.md)**: receipts, low-stock alerts and
+  scheduled digests, in standalone and managed mode.
+- **[RFID](rfid.md)**: the Impinj R700 and LLRP integration, its two modes
+  (`counter_scan` and `enclosure_diff`), the SSE cart-events channel and the
+  `cart.start` and `read.trigger` commands. It also covers USB HID badge
+  readers.
 
-## Project status
+---
 
-- [Shipped & roadmap](roadmap.md) — what's already in the binary and
-  what's deliberately deferred.
+## Project Status
+
+- **[Shipped & Roadmap](roadmap.md)**: what the binaries do now and what is
+  deferred on purpose.
+
+---
 
 ## Plans
 
-Living design documents for work in flight. Each carries its own status
-line; none of them is a reference for what the binary does today.
+These are design documents for work in progress. Each has its own status
+line. None of them describes what the binaries do today.
 
-- [Asset-tracker generalization](asset-tracker-plan.md) — custody plus
-  coarse location on a jobsite, the multi-reader / multi-enclosure
-  topology, the "smart cache" form factor.
-- [Location & sightings](location-sightings-plan.md) — the advisory
-  asset-location layer, external gateways, `last_observed_*`.
-- [Northwind demo](demo-plan.md) — a runnable three-kiosk + timeclock +
-  controller demo estate. The fixture and both `demo-seed` subcommands
-  have landed (`KIOSK_CONFIG=demo/standalone.yaml ./kiosk-app demo-seed
-  --confirm` stands a kiosk up on its own); still ahead are the mock RFID
-  reader and the rule-router rules that drive live traffic through the
-  real commit path.
+- **[Asset-Tracker Generalization](asset-tracker-plan.md)**: custody and
+  coarse location on a jobsite, many readers and enclosures per kiosk node,
+  and the "smart cache" form factor.
+- **[Location & Sightings](location-sightings-plan.md)**: the advisory
+  asset-location layer, external gateways and `last_observed_*`.
+- **[Northwind Demo](demo-plan.md)**: a demo estate with three kiosk nodes, a
+  timeclock terminal and a controller. The fixture and both `demo-seed`
+  subcommands are done. To start one kiosk node alone, run
+  `KIOSK_CONFIG=demo/standalone.yaml ./kiosk-app demo-seed --confirm`. The
+  mock RFID reader and the rule-router rules that send live traffic through
+  the real commit path are still to come.

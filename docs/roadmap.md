@@ -1,279 +1,178 @@
-# Shipped & roadmap
+# Shipped & Roadmap
 
-## Shipped since v1
+This page is the status of the kiosk. It lists what has shipped since v1, and
+what we deferred on purpose, each with its reason. The [CHANGELOG](../CHANGELOG.md)
+has the history of each release. For how the pieces fit together, see
+[Overview](overview.md).
 
-These started as deferred roadmap items and are now live in the binary:
+---
 
-- **Stock tracking with audit log.** `items.quantity_on_hand` /
-  `reorder_threshold`, automatic decrement on `consume`, low-stock
-  report, `/items/{id}/adjust` endpoint with `stock_adjustments` audit
+## 1. Shipped
+
+Each item below started as a deferred roadmap item and is now in the binary.
+
+### Ledger and stock
+
+- **Stock tracking with an audit log.** `items.quantity_on_hand` and
+  `reorder_threshold`, an automatic decrement on `consume`, a low-stock report,
+  and the `/items/{id}/adjust` endpoint with the `stock_adjustments` audit
   table.
-- **Per-instance serialized tracking.** `item_instances` collection,
-  scan resolver precedence, per-instance returns, admin instances panel.
-- **Returns policy enforcement.** `allow_cross_user` /
-  `allow_uncorrelated` flags are honored at commit time and roll back
-  the transaction when set to `false`.
-- **NATS publishing.** `events.Publish` dual-publishes to NATS when
-  `nats.enabled=true`; supports all `nats.go` auth modes; unreachable
-  servers don't block the kiosk from booting.
-- **Ledger rebuild.** Admin button + `/integrity/rebuild` endpoint
+- **Returns policy.** The commit hook honors `allow_cross_user` and
+  `allow_uncorrelated`, and rolls back the transaction when a flag is `false`.
+- **Ledger rebuild.** An admin button and the `/integrity/rebuild` endpoint
   repopulate `open_checkouts` from the ledger.
-- **Central controller (MVP).** New `cmd/controller` binary with a
-  JetStream durable consumer aggregating per-kiosk transactions into a
-  central ledger plus PB hooks publishing item/user catalog changes
-  down to managed kiosks via JetStream KV. Kiosks opt in via the
-  `controller:` config block; the admin SPA gates catalog mutation
-  affordances in managed mode. See [Central controller](controller.md).
-- **Per-kiosk catalog membership.** Controller-side `kiosk_items` join
-  collection plus namespaced KV keys (`<kiosk_code>.<item_code>`) and
-  a prefix-filtered kiosk-side watch. Admin UI on the controller has
-  a "Stocked items" panel per kiosk with add/remove and a "Bulk add
-  by category" snapshot action, plus a "Stocked at" reverse view on
-  each item. Kiosks can also be pre-registered by an admin before
-  they phone home so memberships can be assigned ahead of time.
-- **Controller→kiosk command bus.** Core NATS request/reply (not
-  JetStream) under `{prefix}.{kiosk_code}.cmd.<name>`. v1 shipped
-  `inventory.adjust` (mutating, idempotent via a server-generated
-  `command_id` unique-indexed on `stock_adjustments`) and
-  `inventory.snapshot` (read-only); the bus has since grown to cover
-  `checkout.close` (admin force-close), the `instance.*` family,
-  `integrity.rebuild`, `ledger.republish`, and the RFID
-  `cart.start`/`read.trigger` pair (see the Wire reference). Controller
-  endpoints fast-fail with 503 when the kiosk's heartbeat is stale, and pass
-  the kiosk's reply through unchanged to the SPA.
-- **Heartbeat + online status.** Each kiosk publishes a 45 s heartbeat
-  on `{prefix}.{kiosk_code}.heartbeat` (core NATS, no persistence).
-  The controller keeps an in-memory map and exposes
-  `GET /api/controller/kiosks/heartbeats`; the SPA polls every 10 s
-  and renders online/stale/offline badges in the list view and on the
-  per-kiosk detail page.
-- **Kiosk detail page.** New `/admin/kiosks/<code>` route on the
-  controller SPA replaces the cramped edit dialog. Three tabs
-  (Overview, Items, Inventory) gather all per-kiosk admin work behind
-  a single deep link. The old `KioskDialog` shrank to create-only.
-- **`kiosks.last_transaction_at`.** New field that means what its
-  name says: "when did this kiosk last actually transact?"
-  `touchKiosk` is now narrowed to `transaction.complete` events only
-  — general liveness moved to the heartbeat. `last_seen` rode
-  alongside it for one release as a deprecation window, then was
-  dropped.
-- **Notifications system.** Admin-edited templates for transaction
-  receipts, low-stock alerts, and scheduled open-checkouts digests
-  (`notification_templates`), with per-event recipients specs, a
-  daily dedup gate (`notification_dedupe`), and a one-row-per-recipient
-  send log (`notification_send_log`) pruned at 90 days. Scheduled
-  rows (`scheduled_reports`) drive the digest cron with per-row
-  recipients overrides.
-- **Centralized notifications in managed mode.** Two new JetStream
-  subjects (`receipt.transaction`, `alert.lowstock`) let managed
-  kiosks publish structured context payloads; the controller's
-  aggregator dispatches each through its own notifier against
-  fleet-global templates and the controller's SMTP. The SPA's
-  Notifications view detects role at boot and points its CRUD at
-  `/api/controller/notifications` when running on the controller. One
-  set of SMTP credentials, one audit trail.
-- **Scheduled reports owned by the controller in managed mode.** The
-  `scheduled_reports` collection moves to the controller's
-  responsibility: cron, computation against the projected
-  `open_checkouts` table + ledger, and SMTP all run on the controller.
-  The kiosk-side scheduler stays off when `controller.enabled=true`.
-  An optional `kiosk_code` column on each schedule row scopes the
-  report (empty = fleet-wide, set = one kiosk). The old kiosk →
-  controller `DigestEnvelope` NATS hop is gone.
-- **Fleet-wide low-stock report.**
-  `GET /api/controller/reports/low-stock` fans `inventory.snapshot`
-  out to every online managed kiosk in parallel and joins each
-  reply with `out` counts computed locally from the controller's
-  projected ledger. Offline kiosks surface in an `errors` block so
-  the SPA can render "partial result" transparently. SPA's Low-stock
-  tab on the controller drops its "on the roadmap" banner for a real
-  fleet table.
-- **Inventory adjustment audit.** Every `inventory.adjust` event the
-  controller receives is now projected into `inventory_audit`
-  (denormalized: kiosk, item, delta, prev/new, reason, source,
-  actor), idempotent via a unique `source_adjustment_id`. A new
-  Reports → Adjustment audit tab on the controller exposes
-  filterable, paginated history of every stock change anywhere in
-  the fleet.
-- **Notifications deliverability tab.** A Reports tab on both
-  binaries summarizes the local `notification_send_log` (totals,
-  per-event success-rate table, recent failures) so deliverability
-  regressions surface without clicking through individual rows.
-- **Admin force-close (lost / damaged / returned offline).** Admins
-  can now resolve stale `open_checkouts` rows without bypassing the
-  ledger. New `action="admin_close"` on `transaction_lines` plus a
-  `closure_reason` enum; `lost` / `damaged` drop the item's inventory
-  count — for quantity-tracked items by writing a `stock_adjustments`
-  row, for serialized items by retiring the instance (whose
-  non-retired count the derived quantity follows; no `stock_adjustments` row)
-  — atomic with the close. The kiosk endpoint and the
-  controller's NATS-forwarded `checkout.close` command both converge
-  on `commit.AdminClose`, so a controller-driven close on a remote
-  kiosk behaves identically to a local one (including the qty + audit
-  side-effects).
-- **Instance lifecycle audit + parity.** New `instance_audit`
-  collection on each kiosk, written by PB record hooks on
-  `item_instances` (create / to_maintenance / return_to_service /
-  retire / unretire; cosmetic edits skip). Lifecycle changes also publish
-  `instance.lifecycle` events; the controller projects them into a
-  fleet-wide `instance_lifecycle_audit` collection (idempotent via
-  `source_audit_id`). The SPA's Instance lifecycle Reports tab is
-  visible on both binaries against the appropriate collection so a
-  managed kiosk's admin gets the same visibility a standalone
-  kiosk's admin does.
-- **Serialized maintenance workflow.** `item_instances.active` (bool)
-  became a 3-state `status` enum (`in_service` / `maintenance` /
-  `retired`); units are never hard-deleted (retire instead, so the
-  ledger's FKs stay alive). A maintenance unit counts toward
-  `quantity_on_hand` but not toward `available`. Returns can route a
-  unit straight into maintenance three ways: a per-SKU
-  `items.requires_maintenance_on_return` opt-in, a per-line "needs
-  maintenance" toggle any worker can set, or a manual admin
-  "send to maintenance." A batched `alert.maintenance` notification
-  (one email per transaction) and a `digest.maintenance` scheduled
-  report ("Items in maintenance") round it out. Controller and kiosk
-  reach parity: the single `instance.set_status` command/endpoint
-  replaces the old decommission/reactivate pair, and the Instances tab
-  shows per-unit status.
-- **Worker self-service ("What you have out").** The `/api/kiosk/scan`
-  response now hydrates the scanned worker's outstanding
-  `open_checkouts`; the CheckoutView surfaces a collapsible panel
-  above the cart so a worker reviewing their tally doesn't need an
-  admin to look up "what does this user have out right now?"
-- **Explicit foreman returns.** Scanning a tool another worker has
-  out no longer implicitly switches the action to a cross-user
-  return — the natural reading for quantity-tracked tools is "give
-  me one too," not "close someone else's checkout." Foremen now
-  initiate cross-user returns through a dedicated "Return on behalf
-  of…" dialog that lists workers in their group with at least one
-  open checkout (hydrated via
-  `GET /api/kiosk/cart/foreman-return/options`) and accepts a
-  serialized-instance scan as a one-step shortcut. The dialog is the
-  sole writer of `Line.original_checkout_user_id`; the commit-time
-  foreman+same-group gate stays as the trust boundary.
-- **RFID integration (Impinj R700 / LLRP).** Two modes share one
-  `*llrp.Client` wrapped in `internal/rfid` (imported from EdgeX
-  `device-rfid-llrp-go/pkg/llrp`, pinned at a `@main`
-  pseudo-version). **counter_scan** runs an operator-driven 3-5 s
-  inventory cycle from a button on `CheckoutView` and folds each
-  observed tag into the cart through the existing add path
-  (`POST /api/kiosk/cart/rfid-scan`). **enclosure_diff** is
-  NATS-orchestrated: external access-control fires `cart.start`
-  with `{user_code, enclosure_id}` (idempotent on a secondary cart-store
-  index keyed by that pair), then a camera/occupancy system fires
-  `read.trigger`; the kiosk runs a pure diff against expected-present
-  state via `rfid.Diff` and synthesizes self-return / checkout cart
-  lines. Cross-user returns are skip-and-counted (the commit-time
-  foreman gate would reject them anyway). Every read publishes
-  `evt.scan.rfid.observed` for downstream audit. A small SSE
-  channel (`GET /api/kiosk/cart/events`) lets the SPA refetch on any
-  cart write — the same broker absorbs both modes plus the existing
-  HTTP write paths. Trust boundary stays 127.0.0.1; external systems
-  only reach the kiosk via NATS (per-subject ACLs gate them). USB
-  HID badge readers are unchanged — they emit keyboard events and
-  resolve through the existing `scan.Resolver`. See [RFID](rfid.md).
-- **Timeclock with tool interlocks.** Append-only `time_punches` ledger
-  (funnel-only writes via `timeclock.PerformPunch`, same discipline as the
-  tool ledger) with a splash "Time clock" button + badge scan. Two
-  config-gated interlocks tie the ledgers together
-  (`require_clock_in_for_checkout`, `block_clock_out_with_open_checkouts`);
-  foremen punch crew in their group, admins backdate/force with a reason.
-  In managed mode punches project to the controller and per-user clocked-in
-  state distributes back via the `punch_state` KV bucket, so clock-in at
-  one kiosk and out at another works. Paired intervals/day-totals for humans;
-  the raw-punch CSV is the payroll contract (no rounding/overtime anywhere).
-  A `digest.timeclock` scheduled report emails daily totals to admins, and
-  `digest.timeclock_self` fans out a per-worker timesheet — one private email
-  per active worker. `timeclock_only` turns a device into a dedicated punch
-  station.
-- **Virtual timeclock terminal (no hardware).** A separate binary
-  (`cmd/timeclock`) serves a publicly-reachable, per-user-**authenticated**
-  self-service punch page so workers clock in/out from their phones — no
-  badge scanner. Trust model inverted: each worker signs in (OAuth2 SSO
-  and/or password) and the server reads the punched identity from the
-  session, never the body. It's just another kiosk under the hood (same
-  funnel, same `punch_state` replica) and supports the same three modes as
-  `cmd/kiosk` (standalone / standalone+NATS / controller-managed). Security
-  by construction — it registers only the authed `/api/self/timeclock/*`
-  surface, and OAuth2 is locked match-only. See
-  [Configuration](configuration.md#virtual-timeclock-terminal-timeclockyaml)
-  and [Operations](operations.md#virtual-timeclock-terminal). The punch panel
-  also shows each worker a live today/this-week summary and the day's intervals
-  (a compact "X today" line on physical kiosks).
+- **Admin force-close.** An admin closes a stale `open_checkouts` row as lost,
+  damaged or returned offline, without bypassing the ledger
+  (`action="admin_close"`, `closure_reason`). `lost` and `damaged` reduce the
+  inventory in the same transaction. The local endpoint and the controller's
+  `checkout.close` command both run `commit.AdminClose`.
+- **Worker self-service.** The `/api/kiosk/scan` response includes the
+  scanned worker's open checkouts. `CheckoutView` shows them in a "What you have
+  out" panel.
+- **Explicit foreman returns.** A scan of another worker's tool defaults to
+  checkout. A foreman uses the "Return on behalf of…" dialog for a cross-user
+  return. The commit-time foreman and same-group check stays the trust
+  boundary.
 
-## Roadmap
+### Serialized units
 
-Items below are still intentionally deferred. Schema and event
-subjects are in place to make them additive rather than rewrites.
+- **Per-instance tracking.** The `item_instances` collection, scan-resolver
+  precedence, per-instance returns and the admin Instances panel.
+- **Maintenance workflow.** A 3-state `status` (`in_service`, `maintenance`,
+  `retired`) replaced `item_instances.active`. Nothing hard-deletes a unit. A
+  return can route a unit into maintenance in three ways: the SKU flag, a
+  per-line toggle, or an admin action. The single `instance.set_status`
+  command and endpoint cover every change.
+- **Lifecycle audit.** Each kiosk node writes `instance_audit` from record
+  hooks and publishes `instance.lifecycle` events. The controller projects them
+  into `instance_lifecycle_audit`, idempotent on `source_audit_id`.
 
-- **Controller-side qty projection.** The low-stock report above
-  uses live snapshot fan-out — one NATS round-trip per online kiosk
-  per page load. Fine into the dozens of kiosks; not free. Projecting
-  `inventory.adjust` plus the `item.checkout` / `item.consume` qty
-  deltas into a controller-side `kiosk_inventory` rollup would make
-  the report query O(1) and survive offline kiosks. Deferred until
-  fan-out RTT actually hurts.
-- **More remote commands.** The command bus and dispatcher are in
-  place (`internal/commands/`). Since v1 it has grown well past inventory
-  adjust + snapshot (admin force-close, the `instance.*` family,
-  `integrity.rebuild`, `ledger.republish`, RFID `cart.start`/`read.trigger`
-  — see the shipped entry above). Natural next commands still deferred:
-  force a catalog resync, lock a kiosk to a holding screen. Each is a
-  single handler on the kiosk side plus a controller endpoint that fires
-  `nc.Request` at the appropriate subject.
-- **Drift detection.** Periodic state-hash compare between controller
-  and each kiosk; surface discrepancies in the controller admin UI
-  for triage.
-- **Cross-fleet movement of serialized items.** Move a specific
-  `item_instances` row from kiosk A to kiosk B with central as the
-  arbiter — one serial belongs to one kiosk at a time.
-- **Tighten PB collection rules in managed mode.** UI gating is the
-  v1 story; a follow-up could lock the collection rules themselves
-  so a determined admin poking PB directly can't drift the catalog.
-- **Cross-building returns.** A serialized unit lives in its checkout
-  building's DB, so today a tool is returned where it was checked out. The
-  fleet-wide clock-out gate (below, now shipped) points a worker at the right
-  building; letting them physically return it at a *different* building is a
-  separate, harder problem (the instance row would have to move) and stays
-  deferred.
-- **Asset-tracker generalization (jobsite custody + RFID topology).**
-  *Foundation merged to `main`.* Generalizes the single-cabinet kiosk toward a
-  site-scoped tool & asset platform — north star: the on-site **smart cache**
-  container (see the plan's Physical form factor section): `transactions.door_id` split into `terminal_id` (accepting
-  screen) + `enclosure_id` (cabinet); a per-node **reader map** (several
-  readers, mode per-reader, so one node hosts `counter_scan` + `enclosure_diff`
-  at once); `enclosure_diff` reads **partitioned per cabinet** via
-  `item_instances.enclosure_id` (+ an admin assignment UI); a read-only
-  `config.snapshot` command surfacing each node's reader topology on the
-  controller's Readers tab; and `counter_scan` **multi-reader selection** via a
-  `?reader=` URL param. All additive and N=1-invisible. See
+### Controller and fleet
+
+- **Central controller.** The `cmd/controller` binary aggregates each kiosk
+  node's transactions into a central ledger through a JetStream durable
+  consumer. It publishes item and worker catalog changes to managed nodes
+  through JetStream KV. See [Central Controller](controller.md).
+- **Per-kiosk catalog membership.** The `kiosk_items` collection, KV keys of
+  the form `{kiosk_code}.{item_code}`, and a prefix-filtered watch on each kiosk
+  node. An admin can register a kiosk node before it first connects.
+- **NATS publishing.** `events.Publish` also publishes to NATS when
+  `nats.enabled` is `true`. It supports all `nats.go` auth modes. An
+  unreachable server does not stop a kiosk node from booting.
+- **Command bus.** Core NATS request and reply on
+  `kiosk.{code}.cmd.{name}`, where `kiosk` is the configurable prefix. It
+  started with `inventory.adjust` and `inventory.snapshot`. It now also carries
+  `checkout.close`, the `instance.*` family, `integrity.rebuild`,
+  `ledger.republish`, and the RFID `cart.start` and `read.trigger` pair. See
+  [Wire Protocol](protocol.md).
+- **Heartbeat and online status.** Each kiosk node publishes a heartbeat every
+  45 s on `kiosk.{code}.heartbeat`. The controller serves
+  `GET /api/controller/kiosks/heartbeats`, and its SPA polls it every 10 s. A
+  controller endpoint returns `503` at once when a node's heartbeat is stale.
+- **Kiosk detail page.** `/admin/kiosks/{code}` on the controller groups the
+  per-kiosk work in tabs, behind one deep link.
+- **`kiosks.last_transaction_at`.** It records when the kiosk node last made a
+  transaction. Only `transaction.complete` events update it. Liveness comes
+  from the heartbeat.
+- **Fleet-wide low-stock report.** `GET /api/controller/reports/low-stock`
+  sends `inventory.snapshot` to every online managed node in parallel. Offline
+  nodes show in an `errors` block, so the SPA can mark a partial result.
+- **Inventory adjustment audit.** The controller projects every
+  `inventory.adjust` event into `inventory_audit`, idempotent on
+  `source_adjustment_id`. A Reports tab shows the history for the whole fleet.
+
+### Notifications
+
+- **Notification system.** Admin-edited templates
+  (`notification_templates`), recipients specs, a daily duplicate gate
+  (`notification_dedupe`), and a send log with one row per recipient
+  (`notification_send_log`), pruned at 90 days. `scheduled_reports` rows drive
+  the digest cron. See [Notifications](notifications.md).
+- **Central notifications in managed mode.** A managed kiosk node publishes
+  structured contexts. The controller renders and sends them with fleet-wide
+  templates and its own SMTP. One set of SMTP credentials, one audit trail.
+- **Scheduled reports on the controller.** In managed mode the controller runs
+  the cron, the computation and the SMTP send. A `kiosk_code` on each row
+  scopes a report to one kiosk node, and empty means fleet-wide.
+- **Deliverability tab.** A Reports tab on both binaries summarizes the local
+  `notification_send_log`: totals, success rate per event type, and recent
+  failures.
+
+### RFID and location
+
+- **RFID (Impinj R700, LLRP).** Two modes share one LLRP client in
+  `internal/rfid`. `counter_scan` runs an operator-driven inventory cycle of
+  3 to 5 s. `enclosure_diff` is driven by NATS `cart.start` and `read.trigger`.
+  Every read publishes `evt.scan.rfid.observed`. An SSE channel tells the SPA
+  to refetch after each cart write. See [RFID](rfid.md).
+- **Asset-tracker foundation.** Merged to `main`. It splits
+  `transactions.door_id` into `terminal_id` and `enclosure_id`. It adds a
+  per-node reader map with a mode per reader, and `enclosure_diff` reads
+  partitioned per cabinet. It also adds the read-only `config.snapshot`
+  command and `counter_scan` reader selection by `?reader=`. All of it is
+  additive, and a single-reader node does not see it. Its north star is the
+  on-site **smart cache** container. See the
   [asset-tracker plan](asset-tracker-plan.md).
-- **Location & sightings.** *L1–L4 merged to `main`.* Coarse last-seen of
-  assets from RFID/BLE gateways that are
-  **external publishers** (configured/run off-platform — RFID-over-MQTT into
-  NATS's MQTT interface, or an HTTP→NATS bridge), putting one raw sighting shape
-  on a new lossy `sighting` NATS family (advisory, last-write-wins, outside the
-  durable stream). Resolution is subscriber-side (standalone node via the scan
-  resolver; controller via `instance_epc_index`); projected to
-  `item_instances.last_observed_*` and mirrored fleet-wide via `last_observed_state`
-  KV (sliced per node like `catalog_items`). Custody reads double as sightings.
-  The payoff — **custody-vs-location reconciliation** (`not_taken` / `stale` /
-  `unaccounted`) — ships as `/api/{kiosk,controller}/reconciliation` + an admin
-  view, plus the scheduled `digest.reconciliation` email (cron-bound on both
-  binaries). **Deferred within L4:** controller-side *fleet* BLE (standalone
-  BLE works) and the GPS-polygon theft flag. See
+- **Location and sightings (L1 to L4).** Merged to `main`. External RFID and
+  BLE gateways publish raw sightings on the lossy `sighting` channel, outside
+  the durable stream. Custody reads also count as sightings. The payoff is the
+  custody-vs-location reconciliation (`not_taken`, `stale`, `unaccounted`), as
+  an endpoint, an admin view and the `digest.reconciliation` email. See the
   [location & sightings plan](location-sightings-plan.md).
 
-Each of these can be evaluated on demand. None should be built until
-there is a concrete user asking for it.
+### Timeclock
 
-**Shipped since.** The **fleet-wide clock-out block** is no longer deferred:
-in managed mode `block_clock_out_with_open_checkouts` merges this kiosk's
-local checkouts with a controller-written per-user replica
-(`open_checkouts_state` KV, fed by `ledger.ReplayOpenRowsForUser`), so a
-clock-out at any surface — including the phone terminal, which holds no local
-checkouts — sees and names tools out anywhere in the fleet. It avoids a WAN
-dependency on the punch path (the replica is broadcast along the existing
-controller→fleet KV channel, not queried synchronously) and is **fail-open**:
-a stale/unavailable replica allows the clock-out rather than stranding the
-worker. Workers acknowledge ("clock out anyway") rather than being hard-blocked.
+- **Timeclock with tool interlocks.** An append-only `time_punches` ledger,
+  written only through `timeclock.PerformPunch`. Two config-gated interlocks
+  tie it to the tool ledger. In managed mode, the `punch_state` KV bucket lets
+  a worker clock in at one kiosk node and out at another. The raw-punch CSV is
+  the payroll contract, with no rounding or overtime anywhere.
+  `timeclock_only` makes a device a dedicated punch station.
+- **Timeclock digests.** `digest.timeclock` emails the daily totals to admins.
+  `digest.timeclock_self` sends each active worker a private timesheet.
+- **Timeclock terminal.** The `cmd/timeclock` binary serves a public punch page
+  with per-user authentication (OAuth2 SSO, password, or both). It registers
+  only `/api/self/timeclock/*`, and OAuth2 is match-only. It supports the same
+  three modes as a kiosk node. The punch panel shows each worker today's and
+  this week's totals. See
+  [Configuration Reference](configuration.md#timeclock-terminal-timeclockyaml)
+  and [Operations](operations.md#9-timeclock-terminal).
+- **Fleet-wide clock-out block.** In managed mode,
+  `block_clock_out_with_open_checkouts` sees tools out anywhere in the fleet.
+  The controller writes a per-user replica (`open_checkouts_state` KV) from
+  `ledger.ReplayOpenRowsForUser`. The punch path reads the broadcast replica,
+  so it has no synchronous WAN dependency. It is fail-open, and a worker can
+  "clock out anyway".
+
+---
+
+## 2. Deferred
+
+The schema and the subjects are in place, so each item below can be added
+without a rewrite. We evaluate each one on demand. None of them gets built
+until a concrete user asks for it.
+
+- **Controller-side quantity projection.** A `kiosk_inventory` rollup would
+  make the low-stock report O(1) and cover offline nodes. Deferred because the
+  live fan-out is fine into the dozens of kiosk nodes, until its round trips
+  hurt.
+- **More remote commands**, such as a forced catalog resync, or locking a
+  kiosk node to a holding screen. The command bus is in place, and each one is
+  a kiosk handler plus a controller endpoint. Deferred until a user needs one.
+- **Drift detection.** A periodic state-hash compare between the controller
+  and each kiosk node, shown in the controller admin UI. Deferred because an
+  operator can compare aggregate counts by hand today
+  ([Operations §5](operations.md#5-nats-failure-modes)).
+- **Cross-fleet movement of serialized units.** Move one `item_instances` row
+  from kiosk node A to node B, with the controller as the arbiter. One serial
+  belongs to one kiosk node at a time. Deferred until a user asks for it.
+- **Locked collection rules in managed mode.** Deferred because UI gating is
+  the v1 answer. Locked rules would also stop an admin who edits PocketBase
+  directly.
+- **Cross-building returns.** Return a serialized unit at a building other
+  than the one where it was checked out. Deferred because the instance row
+  would have to move between databases, which is a separate, harder problem.
+- **Controller-side fleet BLE.** Deferred because standalone BLE already
+  works. See the [location & sightings plan](location-sightings-plan.md).
+- **The GPS-polygon theft flag.** Deferred because it needs site-polygon
+  config. See the [location & sightings plan](location-sightings-plan.md).

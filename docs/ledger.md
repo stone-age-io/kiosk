@@ -1,391 +1,433 @@
 # Ledger
 
-This doc describes how the kiosk records state changes, why it's modeled
-as a ledger rather than as direct mutation of inventory rows, and how the
-same model extends to the controller's fleet-wide view. It assumes
-familiarity with [Schema](schema.md) and the architecture overview in
+This page describes how a kiosk node records state changes and why we model
+them as a ledger, not as direct changes to inventory rows. It also shows how
+the same model extends to the controller's fleet view. Read
+[Schema](schema.md) first. The controller itself is in
+[Central Controller](controller.md), and the architecture overview is in
 [CLAUDE.md](../CLAUDE.md).
 
-## What "the ledger" is
+---
 
-The ledger is two collections plus one derived view:
+## 1. What the Ledger Is
+
+The ledger is two collections and one derived view:
 
 | Collection | Role |
-|---|---|
-| `transactions` | One row per committed cart. Header-level facts: who, where, when, status. Append-only after commit. |
-| `transaction_lines` | One row per item action inside a transaction. Action is `checkout`, `return`, `consume`, or `admin_close`. Carries `item_instance` for serialized lines, `original_checkout_user` for cross-user returns and every admin close. Append-only after commit. |
-| `open_checkouts` | "What is out right now." One row per unit currently checked out. Maintained by the commit hook; rebuildable from the two collections above. |
+| :--- | :--- |
+| `transactions` | One row per committed cart. Header facts: who, where, when, status. Append-only after commit. |
+| `transaction_lines` | One row per item action in a transaction. The action is `checkout`, `return`, `consume` or `admin_close`. It carries `item_instance` for serialized lines, and `original_checkout_user` for cross-user returns and every admin close. Append-only after commit. |
+| `open_checkouts` | "What is out now." One row per unit that is checked out. The commit path keeps it current. You can rebuild it from the two collections above. |
 
-The first two are the ledger proper: an immutable sequence of facts. The
-third is a cache of "current state" derived from those facts —
-materialized so the kiosk UI can answer "what's out?" in a single SELECT
-instead of replaying history per page load.
+The first two are the ledger proper: a sequence of facts that never changes.
+The third is a cache of the current state, derived from those facts. The
+kiosk node stores it so its UI can answer "what is out?" with one SELECT. It
+does not replay history on each page load.
 
-Other collections in the same database act as supporting audit logs and
-follow the same append-only discipline: `stock_adjustments` (every
-admin adjustment to a quantity-tracked item's `quantity_on_hand`) and
-`instance_audit` (every lifecycle change on a serialized unit — which
-is also what moves a serialized SKU's derived `quantity_on_hand`). They
-aren't part of the ledger's checkout state machine, but they share the
-design property that every mutation leaves a permanent row behind.
+Two other collections in the same database are supporting audit logs. They
+follow the same append-only rule:
 
-`time_punches` is a **second append-only ledger** with the exact same
-discipline: one row per clock-in/clock-out punch, written only by the funnel
-`timeclock.PerformPunch`, never edited or deleted (corrections are new
-punches with a reason). Like `open_checkouts` derives "what's out," the
-clocked-in state is derived from the latest punch per worker rather than
-stored — no materialized open-shifts table. The raw-punch CSV export is the
-payroll contract; no rounding/overtime/pay-period logic lives anywhere in
-this codebase (same stance as billing).
+- `stock_adjustments` records every admin adjustment to the
+  `quantity_on_hand` of a quantity-tracked item.
+- `instance_audit` records every lifecycle change on a serialized unit. That
+  change also moves the derived `quantity_on_hand` of a serialized SKU.
 
-## The single write path
+These logs are not part of the checkout state machine. They share its design
+property: every change leaves a permanent row.
 
-Every state-changing action a worker can take — checkout, return,
-consume, or any combination in one cart — flows through one function:
-[`commit.Commit`](../internal/commit/commit.go). Admin force-closes use
-a sibling entry point, [`commit.AdminClose`](../internal/commit/admin_close.go),
-which writes the same shape of rows.
+`time_punches` is a **second append-only ledger** with the same rules:
 
-The structure is:
+- It holds one row per clock-in or clock-out punch.
+- Only the funnel `timeclock.PerformPunch` writes it.
+- Nothing edits or deletes a punch. A correction is a new punch with a reason.
 
-1. Open a single PocketBase database transaction (`app.RunInTransaction`).
-2. Write one `transactions` row.
-3. For each cart line:
-   - Validate the action is legal for the item type (`consume` only on
-     consumables; serialized items must have qty=1 and an instance FK; etc.).
-   - Write one `transaction_lines` row.
-   - Apply the per-action side effect on `open_checkouts`:
-     - `checkout` → insert N rows.
-     - `return` → delete up to N rows (mark line `uncorrelated=true` if
-       fewer matched). For serialized items the row is uniquely
-       identified by `item_instance`; for non-serialized, only rows
-       belonging to the `original_checkout_user` (or the cart user if
-       unset) are eligible — the resolver never silently borrows from
-       another user's open rows.
-     - `consume` → decrement `items.quantity_on_hand`. No
-       `open_checkouts` write.
-4. Commit the database transaction.
-5. **After** the database commit succeeds, publish one
-   `transaction.complete` event plus one `item.{action}` event per line
-   via `events.Publish` (slog always, NATS when configured).
+`open_checkouts` derives "what is out". In the same way, the clocked-in state
+comes from the latest punch per worker. Nothing stores it, and there is no
+open-shifts table. The raw-punch CSV export is the payroll contract. No
+rounding, overtime or pay-period logic exists anywhere in this codebase, the
+same position as for billing.
 
-The structure encodes three invariants:
+---
+
+## 2. The Single Write Path
+
+Every change a worker can make goes through one function,
+[`commit.Commit`](../internal/commit/commit.go). That covers checkout,
+return, consume and any mix of them in one cart. An admin force-close uses a
+sibling entry point, [`commit.AdminClose`](../internal/commit/admin_close.go),
+which writes rows of the same shape.
+
+`commit.Commit` does these steps:
+
+1. It opens one PocketBase database transaction (`app.RunInTransaction`).
+2. It writes one `transactions` row.
+3. For each cart line, it does three things:
+   - It checks that the action is legal for the item type. For example,
+     `consume` applies only to consumables, and a serialized item must have
+     qty=1 and an instance FK.
+   - It writes one `transaction_lines` row.
+   - It applies the side effect of the action:
+     - `checkout` inserts N rows into `open_checkouts`.
+     - `return` deletes up to N rows. If fewer rows match, it marks the line
+       `uncorrelated=true`. For a serialized item, `item_instance` identifies
+       the row. For a non-serialized item, only rows of the
+       `original_checkout_user` are eligible, or of the cart user if that
+       field is empty. The resolver never takes rows from another user.
+     - `consume` decrements `items.quantity_on_hand`. It writes nothing to
+       `open_checkouts`.
+4. It commits the database transaction.
+5. **After** the commit succeeds, it publishes one `transaction.complete`
+   event and one `item.{action}` event per line through `events.Publish`.
+   That always writes a slog line, and it publishes to NATS when NATS is
+   configured.
+
+### The three invariants
 
 - **`transactions` and `transaction_lines` are append-only.** PocketBase
-  collection rules forbid writes via the REST API; the commit code path
-  is the only writer. There is no "edit a transaction" or "delete a
-  line" affordance anywhere in the SPA, by design.
-- **`open_checkouts` is a function of the ledger.** A row in
-  `open_checkouts` always has a backing `transaction_line` FK; deleting
-  the table and replaying the ledger yields the same content. This is
-  enforced by giving `commit.Commit` exclusive write access to the
-  table — `open_checkouts` collection rules are similarly closed.
-- **Events fire only after the database commit succeeds.** If the
-  database transaction rolls back, no event is published. There is no
-  "queued event that didn't really happen" failure mode.
+  collection rules forbid writes through the REST API. The commit path is the
+  only writer. By design, the SPA has no control to edit a transaction or to
+  delete a line.
+- **`open_checkouts` is a function of the ledger.** Each row in
+  `open_checkouts` has a `transaction_line` FK behind it. If you delete the
+  table and replay the ledger, you get the same content. `commit.Commit` is the
+  only writer of the table, and the `open_checkouts` collection rules are
+  closed too.
+- **Events fire only after the database commit succeeds.** If the database
+  transaction rolls back, nothing is published. No event can announce
+  something that did not happen.
 
-A consequence worth calling out: a `checkout` of `qty=N` for a
-non-serialized tool creates **N rows** in `open_checkouts`, one per
-physical unit. A serialized checkout creates exactly one row and that
-row is uniquely keyed by the `item_instance` FK. This is what lets a
-return of "DR-IMPACT-042 unit A" close out *that exact unit* without
-disturbing units B and C of the same SKU.
+### Two consequences
 
-A second consequence: consumables and consumable returns never touch
-`open_checkouts`. The state of a consumable is entirely captured by
-`items.quantity_on_hand`; the ledger holds the audit trail of the
-decrements.
+A `checkout` of `qty=N` for a non-serialized tool creates **N rows** in
+`open_checkouts`, one per physical unit. A serialized checkout creates exactly
+one row, keyed by the `item_instance` FK. So a return of "DR-IMPACT-042 unit
+A" closes *that exact unit* and leaves units B and C of the same SKU alone.
 
-## What the design buys
+Consumables and consumable returns never touch `open_checkouts`.
+`items.quantity_on_hand` holds the whole state of a consumable. The ledger
+holds the audit trail of the decrements.
 
-The ledger model is not the only way to track a kiosk's state. A simpler
-alternative would be to mutate `items.quantity_on_hand` directly on each
-checkout/return and skip the line-by-line audit table entirely. The
-ledger trades a small amount of write-time work for several properties
-the simpler design can't provide:
+---
 
-- **Reconstruction.** `open_checkouts` can be rebuilt from
-  `transaction_lines` at any time. The integrity tooling
-  (`GET /api/kiosk/integrity` and
-  `POST /api/kiosk/integrity/rebuild`) exists precisely because the
-  derived view is treated as untrusted relative to the ledger. If the
-  hook is buggy, if a manual DB edit happens, if a power loss interrupts
-  a write — replay produces the right answer. See
-  [`expectedOpenCheckouts`](../internal/handlers/integrity.go) for the
-  replay rules.
-- **Audit.** Every action carries who (user FK), where (kiosk_code +
-  location_code stamped from process-global identity), when (timestamps
-  on both `started_at` and `completed_at`), and why (action + reason
-  fields for admin closes). Deletes are not part of the API surface; a
-  retraction is a new row, not a removal of an old one.
-- **No "double-spend" race.** Because checkout/return and the
-  corresponding `open_checkouts` insert/delete happen in one DB
-  transaction, there's no window where the ledger says "out" and the
-  view says "not out" or vice versa. Crashes between steps cannot leave
-  a partially-applied state — SQLite either commits the lot or rolls
-  the lot back.
-- **Federation-ready by construction.** Every transaction is stamped
-  with `kiosk_code` and `location_code` at write time, from the
-  process-global identity set at startup ([`internal/kioskctx`](../internal/kioskctx)).
-  Clients don't supply these fields. Two kiosks at different sites can
-  both write transactions for the same SKU without any coordination,
-  and a downstream consumer can disambiguate by inspection.
-- **Event publishing is a fan-out of ledger writes, not a separate
-  protocol.** The `evt.transaction.complete` and
-  `event.item.{action}` subjects carry the same facts the ledger rows
-  do, in the same shape. There is no second commit hook for "tell the
-  outside world" — the publish step reads from the freshly-written
-  records.
+## 3. What the Design Buys and Costs
 
-What the design costs:
+The ledger is not the only way to track a kiosk node's state. A simpler design
+would change `items.quantity_on_hand` directly on each checkout and return, and
+keep no audit table per line. The ledger does a little more work at write time.
+In return, it gives properties that the simpler design cannot:
 
-- **Two tables to read instead of one.** Reporting code joins
-  `transactions` and `transaction_lines` (and often `open_checkouts`)
-  rather than pivoting on a single row. List views pre-paginate to keep
-  this from becoming a problem; `transactions.lines_count` is
-  denormalized at commit time so list pages don't need an N+1
-  `COUNT(*)`.
-- **Storage grows monotonically.** A kiosk that processes 200
-  transactions a day at 3 lines each accumulates ~220k rows per year on
-  the lines table. This is well under SQLite's comfort zone and not a
-  near-term concern, but a 10-year-old kiosk will have a non-trivial
-  database file. There is no retention policy in v1 — the ledger is
-  intentionally kept whole.
-- **Hot-path validation is in commit, not in the schema.** Rules like
-  "serialized line must carry an instance" or "consume only valid for
-  consumables" live in Go, not in collection rules. The trade-off is
-  that the same code path runs both interactive commits and ledger
-  replays — and replays don't re-validate.
+- **Reconstruction.** You can rebuild `open_checkouts` from
+  `transaction_lines` at any time. The integrity tools
+  (`GET /api/kiosk/integrity` and `POST /api/kiosk/integrity/rebuild`) exist
+  because we treat the derived view as less trusted than the ledger. A buggy
+  hook, a manual database edit or a power loss during a write can all damage
+  the view. A replay gives the right answer in each case.
+  [`expectedOpenCheckouts`](../internal/handlers/integrity.go) has the replay
+  rules.
+- **Audit.** Every action records four facts:
+  - Who: the user FK.
+  - Where: `kiosk_code` and `location_code`, from the process identity.
+  - When: `started_at` and `completed_at`.
+  - Why: the action, and a reason for admin closes.
 
-## `open_checkouts` as a derived view
+  The API has no delete. A retraction is a new row, not the removal of an old one.
+- **No double-spend race.** A checkout or return and its `open_checkouts`
+  insert or delete happen in one database transaction. So the ledger and the
+  view never disagree about whether a unit is out. A crash between steps
+  cannot leave a partial change. SQLite commits all of it or rolls all of it
+  back.
+- **Ready for a fleet by construction.** Each transaction gets `kiosk_code`
+  and `location_code` at write time, from the process identity set at start
+  ([`internal/kioskctx`](../internal/kioskctx)). Clients do not supply these
+  fields. Two kiosk nodes at different sites can write transactions for the
+  same SKU with no coordination. A consumer downstream tells them apart from
+  the rows themselves.
+- **Events are a fan-out of ledger writes, not a separate protocol.** The
+  `evt.transaction.complete` and `evt.item.{action}` subjects carry the same
+  facts as the ledger rows, in the same shape. There is no second commit hook
+  to tell the outside world. The publish step reads the records it just wrote.
 
-The materialized-view treatment of `open_checkouts` deserves a closer
-look because it's where the "ledger is source of truth" property is
-operationalized.
+The design has costs:
 
-Replay rules (from
-[`expectedOpenCheckouts`](../internal/handlers/integrity.go)):
+- **Two tables to read, not one.** Reports join `transactions` and
+  `transaction_lines`, and often `open_checkouts`. They do not read one row.
+  List views paginate first to keep this small. The commit stores
+  `transactions.lines_count`, so a list page needs no `COUNT(*)` per row.
+- **Storage only grows.** A kiosk node with 200 transactions a day at 3 lines
+  each adds about 220k rows per year to the lines table. That is well inside
+  what SQLite handles, and it is not a near-term concern. A 10-year-old kiosk
+  node will still have a large database file. There is no retention policy in
+  v1. We keep the whole ledger on purpose.
+- **Hot-path validation is in the commit code, not in the schema.** Rules such
+  as "a serialized line must carry an instance" or "consume applies only to
+  consumables" live in Go, not in collection rules. The same code path runs
+  interactive commits and ledger replays, and a replay does not validate
+  again.
 
-- For each completed transaction, walk lines in order.
-- `checkout`: increment the bucket keyed by `(item, item_instance, user)` by `qty`.
-- `return`: decrement the bucket keyed by `(item, item_instance, original_checkout_user OR transaction.user)` by `qty`.
-- `admin_close`: decrement, identical to `return` — the line always carries
-  `original_checkout_user` (the holder whose row was force-closed). Both the
-  integrity *check* ([`expectedOpenCheckouts`](../internal/handlers/integrity.go))
-  and the *rebuild* ([`ledger.ReplayOpenRows`](../internal/ledger/replay.go))
-  subtract on it, so an admin force-close shows no false drift and the rebuild
-  doesn't resurrect the closed row.
-- `consume`: ignored (consumables don't open rows).
+---
 
-Returns (and admin closes) target the holder's rows **only** — there is no
-borrowing from another user when a return over-subtracts. A shortfall leaves
-other users' rows intact and the line is stamped `uncorrelated`. The replay
-mirrors `commit.candidateOpenRows` exactly on this point; an earlier version
-of the rebuild/projection borrowed FIFO from any user, which silently diverged
-from commit.
+## 4. `open_checkouts` as a Derived View
 
-Diff against the current `open_checkouts` table:
+`open_checkouts` is where the rule "the ledger is the source of truth" becomes
+something you can check.
 
-- `missing_in_table` — replay says a row should exist; actual table has
-  none. Hook bug or interrupted write.
-- `extra_in_table` — actual table has a row replay doesn't expect.
-  Manual DB edit or stale row.
+### Replay rules
 
-Healthy result: both arrays empty, `expected_open == actual_open`.
+These come from
+[`expectedOpenCheckouts`](../internal/handlers/integrity.go):
 
-Rebuild (`POST /api/kiosk/integrity/rebuild`) wipes the table inside one
-DB transaction and re-inserts from replay. Each rebuilt row carries the
-source line's `completed_at` as `checked_out_at` and an FK back to the
-originating `transaction_line`, so aging and audit reports remain
-meaningful after a rebuild.
+- For each completed transaction, walk its lines in order.
+- `checkout`: add `qty` to the bucket keyed by `(item, item_instance, user)`.
+- `return`: subtract `qty` from the bucket keyed by
+  `(item, item_instance, original_checkout_user OR transaction.user)`.
+- `admin_close`: subtract, the same as `return`. The line always carries
+  `original_checkout_user`, the holder whose row the admin closed.
+- `consume`: skip it. Consumables do not open rows.
 
-## Events: ledger writes, broadcast
+Both the integrity *check*
+([`expectedOpenCheckouts`](../internal/handlers/integrity.go)) and the
+*rebuild* ([`ledger.ReplayOpenRows`](../internal/ledger/replay.go)) subtract
+on `admin_close`. So an admin force-close shows no false drift, and the
+rebuild does not restore the closed row.
 
-Every ledger write produces events on a NATS subject. Subjects follow
-`<prefix>.<kiosk_code>.<family>.<...>`; the ledger contributes the
-`event.` family:
+Returns and admin closes reduce the holder's rows **only**. When a return
+subtracts more than the holder has, the replay takes nothing from another
+user. The other users' rows stay, and the line is stamped `uncorrelated`. The
+replay matches `commit.candidateOpenRows` exactly on this point.
 
-- `evt.transaction.complete` — one per commit.
-- `event.item.{action}` — one per line. `{action}` is `checkout`,
-  `return`, `consume`, or `admin_close`.
+### The integrity check
 
-Two additional event subjects ride alongside but originate outside the
-commit path:
+The check compares the replay with the current `open_checkouts` table:
 
-- `evt.inventory.adjust` — from admin stock adjustments
-  ([`stock_adjust.go`](../internal/handlers/stock_adjust.go)) and as
-  the qty side-effect of `lost`/`damaged` admin closes of
-  **quantity-tracked** items. Serialized closes don't emit it — the
-  unit's removal rides `evt.instance.lifecycle` instead, and the
-  derived quantity follows the active-instance count.
-- `evt.instance.lifecycle` — from `item_instances` PB record hooks
-  and from `commit.AdminClose` when retiring a serialized unit.
+- `missing_in_table`: the replay expects a row and the table has none. Cause:
+  a hook bug or an interrupted write.
+- `extra_in_table`: the table has a row the replay does not expect. Cause: a
+  manual database edit or a stale row.
 
-The bind for the controller's JetStream stream is
-`kiosk.*.evt.>` — commands (`command.`) and heartbeats (`heartbeat`)
-ride core NATS and stay outside by construction rather than by
-filter-list discipline. Adding a new event subject means
-(1) adding a builder + filter helper in
-[`internal/events/subjects.go`](../internal/events/subjects.go) and
-(2) extending the consumer's `FilterSubjects` and dispatch switch. The
-stream picks the new subject up automatically.
+A healthy result has both arrays empty and `expected_open == actual_open`.
 
-When NATS is disabled or unreachable, `events.Publish` still emits a
-slog line (`kiosk.event`). The ledger and the slog stream both remain
-authoritative; the NATS broadcast is best-effort transport for
-downstream consumers.
+### Rebuild
 
-## The controller's projected ledger
+`POST /api/kiosk/integrity/rebuild` deletes the table and inserts it again
+from the replay, inside one database transaction. Each rebuilt row gets the
+source line's `completed_at` as `checked_out_at`, and an FK to the
+`transaction_line` it came from. So aging and audit reports stay correct
+after a rebuild.
 
-The controller binary embeds the same migrations as the kiosk plus a
+---
+
+## 5. Events: Ledger Writes, Broadcast
+
+Every ledger write produces events on NATS. Subjects follow
+`{prefix}.{kiosk_code}.{channel}.{rest}`, where `{prefix}` is
+`nats.subject_prefix` and defaults to `kiosk`. The ledger publishes on the
+`evt` channel:
+
+- `kiosk.{code}.evt.transaction.complete`: one per commit.
+- `kiosk.{code}.evt.item.{action}`: one per line. `{action}` is `checkout`,
+  `return`, `consume` or `admin_close`.
+
+Two more event subjects travel beside them but start outside the commit path:
+
+- `kiosk.{code}.evt.inventory.adjust` comes from admin stock adjustments
+  ([`stock_adjust.go`](../internal/handlers/stock_adjust.go)). It is also the
+  quantity side effect of a `lost` or `damaged` admin close of a
+  **quantity-tracked** item. A serialized close does not emit it. The unit's
+  removal travels on `evt.instance.lifecycle`, and the derived quantity
+  follows the count of active instances.
+- `kiosk.{code}.evt.instance.lifecycle` comes from the `item_instances`
+  PocketBase record hooks, and from `commit.AdminClose` when it retires a
+  serialized unit.
+
+The controller's JetStream stream binds `kiosk.*.evt.>`. Commands (`cmd`) and
+heartbeats (`heartbeat`) use core NATS. They stay outside the stream by
+construction, not because someone keeps a filter list. To add a new event
+subject:
+
+1. Add a builder and a filter helper in
+   [`internal/events/subjects.go`](../internal/events/subjects.go).
+2. Add it to the consumer's `FilterSubjects` and its dispatch switch.
+
+The stream captures the new subject with no change.
+
+When NATS is off or unreachable, `events.Publish` still writes a slog line
+(`kiosk.event`). The ledger and the slog stream both stay authoritative. The
+NATS broadcast is best-effort transport for consumers downstream.
+
+---
+
+## 6. The Controller's Projected Ledger
+
+The controller binary embeds the same migrations as the kiosk node, plus a
 small set of controller-only collections. Its `transactions` and
-`transaction_lines` collections gain two extra fields each, used as
-idempotency anchors:
+`transaction_lines` collections each get extra fields, used as idempotency
+keys:
 
 | Field | On | Purpose |
-|---|---|---|
-| `source_kiosk_code` + `source_transaction_id` | `transactions` (unique pair index) | One row per (originating kiosk, originating transaction). Redelivery is a no-op. |
-| `source_line_id` | `transaction_lines` (unique-when-non-empty) | Same idea, line scope. |
+| :--- | :--- | :--- |
+| `source_kiosk_code` + `source_transaction_id` | `transactions` (unique pair index) | One row per originating kiosk node and transaction. A redelivery is a no-op. |
+| `source_line_id` | `transaction_lines` (unique-when-non-empty) | The same idea, for lines. |
 
 A JetStream durable consumer named `controller-aggregator`
 ([`internal/controller/consumer.go`](../internal/controller/consumer.go))
-binds to the event subject family and projects:
+binds the `evt` channel and projects each event:
 
-- `evt.transaction.complete` → one `transactions` row.
-- `event.item.{action}` → one `transaction_lines` row. The controller
-  answers "currently-out" by replaying these lines on demand
-  (`ledger.ReplayOpenRows`) rather than materializing an `open_checkouts`
-  table — convergent by construction, so it cannot drift from a kiosk's.
-  After each line projection it also recomputes the affected worker's
-  fleet-wide open set with `ledger.ReplayOpenRowsForUser` — a bounded
-  per-user replay (the union of the worker's own transactions and any
-  transaction whose return/close names them as `original_checkout_user`, so a
-  foreman's cross-user return still closes the holder's row) — and broadcasts
-  it to the `open_checkouts_state` KV bucket that feeds the fleet-wide
-  clock-out gate.
-- `evt.inventory.adjust` → one `inventory_audit` row (idempotent
-  via `source_adjustment_id`).
-- `evt.instance.lifecycle` → one `instance_lifecycle_audit` row
-  (idempotent via `source_audit_id`).
-- `evt.checkout.admin_close` → one `transactions` row + one `admin_close`
-  `transaction_lines` row (`ProjectAdminCloseToLedger`, mirroring
-  `commit.AdminClose`'s local writes). An admin close publishes **only**
-  this subject — never `transaction.complete` or `item.*` — so this event
-  is the controller's sole view of it; projecting it as a line is what
-  makes the replay drop the holder's row.
-- `evt.integrity.rebuild` — acknowledged and logged today (audit hook
-  for a future ops view); there's nothing to rebuild now that the
-  controller replays the ledger instead of materializing open_checkouts.
+| Event | Projection |
+| :--- | :--- |
+| `evt.transaction.complete` | One `transactions` row. |
+| `evt.item.{action}` | One `transaction_lines` row. Then the aggregator recomputes the worker's open set for the fleet and writes it to `open_checkouts_state` (see below). |
+| `evt.inventory.adjust` | One `inventory_audit` row, idempotent on `source_adjustment_id`. |
+| `evt.instance.lifecycle` | One `instance_lifecycle_audit` row, idempotent on `source_audit_id`. |
+| `evt.checkout.admin_close` | One `transactions` row and one `admin_close` line (`ProjectAdminCloseToLedger`), the same writes as `commit.AdminClose` makes locally. |
+| `evt.integrity.rebuild` | Acknowledged and logged, as an audit hook for a future operations view. The controller stores no `open_checkouts`, so it has nothing to rebuild. |
 
-The projection is purely additive. The controller never writes back to
-the kiosk's ledger; the data flow is one-directional kiosk → controller
-for the ledger surface.
+### Open checkouts on the controller
 
-The kiosk's `users` and `items` flow in the opposite direction (controller
-→ kiosk over JetStream KV), but those are catalog records, not ledger
-records. The split is deliberate: catalog is managed centrally and
-distributed; ledger is generated at the edge and aggregated centrally.
+The controller **does not store an `open_checkouts` table**. When it needs
+the open set from its own data, it replays the projected lines
+(`ledger.ReplayOpenRows`). The result converges with each kiosk node's view by
+construction, so it cannot drift. The Currently out report asks online kiosk
+nodes first and replays only for an offline one
+([Central Controller §6](controller.md#6-reports)).
 
-## Idempotency
+After each line projection, the aggregator also recomputes the affected
+worker's open set across the fleet with `ledger.ReplayOpenRowsForUser`. That
+replay is bounded to one user. It reads the worker's own transactions, and
+every transaction whose return or close names the worker as
+`original_checkout_user`. So a foreman's cross-user return still closes the
+holder's row. The aggregator writes the result to the `open_checkouts_state`
+bucket, which feeds the fleet-wide clock-out gate.
 
-Every write the controller does on behalf of an event is idempotent
-because the storage layer enforces uniqueness on a stable key:
+### Admin closes
 
-| Surface | Key | Effect on duplicate |
-|---|---|---|
-| `transactions` projection | unique(`source_kiosk_code`, `source_transaction_id`) | Lookup-first, insert-on-miss; unique-violation on race is caught and treated as already-projected. |
-| `transaction_lines` projection | unique-when-non-empty `source_line_id` | Same pattern. |
-| `inventory_audit` | unique-when-non-empty `source_adjustment_id` | Same. |
-| `instance_lifecycle_audit` | unique-when-non-empty `source_audit_id` | Same. |
-| `checkout.admin_close` projection | unique(`source_kiosk_code`, `source_transaction_id`) + `source_line_id` | Projected as a `transactions` + `admin_close` `transaction_lines` pair (same anchors as the rows above), so a redelivery no-ops. The controller no longer materializes `open_checkouts`, so there are no guarded deletes — the replay drops the holder's row from the projected line. |
-| Remote `inventory.adjust` command | unique-when-non-empty `command_id` on `stock_adjustments` | Kiosk-side: a retried command finds the prior row and replies with the prior result instead of double-applying. |
-| Remote `checkout.close` command | unique-when-non-empty `command_id` on `transactions` | Same pattern, transaction-scoped. |
-| Remote `instance.{create,set_status}` | unique-when-non-empty `command_id` on `instance_audit` | Same. |
+An admin close publishes **only** `evt.checkout.admin_close`, never
+`transaction.complete` or `item.*`. So this event is the controller's only
+view of the close. The projected `admin_close` line is what makes the replay
+drop the holder's row.
 
-JetStream's at-least-once delivery means the consumer can see the same
-event twice. The unique indexes turn that into a no-op rather than a
-double-write.
+### One direction for each kind of record
 
-## Drift recovery
+The projection only adds rows. The controller never writes back to a kiosk
+node's ledger. Ledger data flows one way, from the kiosk node to the
+controller.
 
-The controller's projected ledger is a copy maintained over an unreliable
-transport (NATS, with `MaxAge=7d` retention in v1). Three things can
-cause it to drift from a kiosk's local ledger:
+`users` and `items` flow the other way, from the controller to the kiosk node
+over JetStream KV. Those are catalog records, not ledger records. We split
+them on purpose. The controller manages the catalog and distributes it. The
+kiosk nodes generate the ledger at the edge, and the controller collects it.
 
-1. NATS was unreachable when an event was published. The publish is
-   queued in the client's in-memory buffer; if the buffer overflows or
-   the kiosk process restarts before reconnect, the event is lost from
-   the controller's view. The kiosk's local ledger still has the
-   transaction.
-2. The controller process was down past the JetStream retention window
-   (default 7 days). Events older than `MaxAge` drop off the stream and
-   re-running the consumer can't replay them.
-3. A bug or manual edit on either side. (Manual edits are blocked by
-   PB collection rules in the normal API surface, but a PB superuser
-   can still touch rows via `/_/`.)
+---
 
-Two operator tools close this gap:
+## 7. Idempotency
 
-- `POST /api/kiosk/ledger/republish` — re-emits, per completed
-  transaction in an optional `{from, to}` ISO8601 window, the same events
-  the live commit path sent: `transaction.complete` + `item.{action}` for
-  ordinary transactions, and a single `checkout.admin_close` for admin
-  force-close transactions (matching `commit.AdminClose`'s live shape).
-  Payloads are rebuilt from persisted rows with original timestamps and the
-  `kiosk_code`/`location_code` stamped at original commit time. Safe to
-  re-run because the controller's projection is idempotent.
-- `POST /api/controller/kiosks/{code}/ledger/republish` — same thing,
-  driven over NATS request/reply from the controller (the operator
-  doesn't need shell access to the kiosk).
+Every write the controller makes for an event is idempotent, because the
+storage layer enforces a unique, stable key:
 
-For the inverse — the kiosk's `open_checkouts` has drifted from its
-own ledger — use the integrity rebuild path described above.
+| Surface | Key | Effect of a duplicate |
+| :--- | :--- | :--- |
+| `transactions` projection | unique(`source_kiosk_code`, `source_transaction_id`) | Lookup first, insert on a miss. A unique violation from a race is caught and treated as already projected. |
+| `transaction_lines` projection | unique-when-non-empty `source_line_id` | The same pattern. |
+| `inventory_audit` | unique-when-non-empty `source_adjustment_id` | The same. |
+| `instance_lifecycle_audit` | unique-when-non-empty `source_audit_id` | The same. |
+| `checkout.admin_close` projection | unique(`source_kiosk_code`, `source_transaction_id`) + `source_line_id` | Projected as a `transactions` row and an `admin_close` line, with the same keys as the rows above. A redelivery is a no-op. The controller stores no `open_checkouts`, so there are no guarded deletes. The replay drops the holder's row because of the projected line. |
+| Remote `inventory.adjust` command | unique-when-non-empty `command_id` on `stock_adjustments` | On the kiosk node: a retried command finds the earlier row and replies with the earlier result. It does not apply twice. |
+| Remote `checkout.close` command | unique-when-non-empty `command_id` on `transactions` | The same pattern, at transaction scope. |
+| Remote `instance.{create,set_status}` | unique-when-non-empty `command_id` on `instance_audit` | The same. |
 
-There is no automatic drift detection in v1. Compare aggregate counts
-(`transactions.count` per `kiosk_code` on the controller vs. count on
-the kiosk) by hand if drift is suspected.
+JetStream delivers at least once, so the consumer can see one event twice.
+The unique indexes make the second delivery a no-op, not a second write.
 
-## Standalone vs. managed: the same ledger model
+---
 
-A standalone kiosk has the full ledger (transactions, transaction_lines,
-open_checkouts) and writes through the same `commit.Commit` path. Events
-fire and are emitted to slog; if NATS isn't configured, they stop there.
-Reports read from the local ledger.
+## 8. Drift Recovery
 
-A managed kiosk has the same ledger, the same commit path, the same
-events. NATS is configured and the events also reach the controller's
-durable consumer, which projects them. Catalog records flow in from the
-controller's KV buckets, but the kiosk's local ledger remains
-authoritative for what happened at that kiosk. If the controller is
-unreachable, the kiosk continues to operate normally — checkouts work,
-events buffer, and the controller's projection catches up on
-reconnect (or on republish if it can't).
+The controller's projected ledger is a copy kept over an unreliable transport:
+NATS, with `MaxAge=7d` retention in v1. Three things can make it drift from a
+kiosk node's local ledger:
 
-The controller is not a database upgrade for the kiosk. It is a
-projection target that happens to share the same row shapes for the
-ledger surface, plus its own audit collections for the non-ledger event
-families. Deleting the controller's `pb_data_controller/` and rebuilding
-it from a `ledger.republish` run across every kiosk reproduces the
-transaction / line surface — and therefore the open-checkouts view the
-controller derives from it by replay — modulo events older than JetStream
-retention, which the next manual export pass would need to cover.
+1. **NATS was unreachable when the kiosk node published an event.** The
+   client holds the publish in its memory buffer. If the buffer overflows, or
+   the kiosk node restarts before it reconnects, the controller never sees the
+   event. The kiosk node's local ledger still has the transaction.
+2. **The controller was down for longer than the JetStream retention window**
+   (7 days by default). Events older than `MaxAge` leave the stream, and the
+   consumer cannot replay them.
+3. **A bug or a manual edit on either side.** PocketBase collection rules block
+   manual edits through the normal API. A PocketBase superuser can still change
+   rows through `/_/`.
 
-Admin force-closes are reproduced faithfully: republish detects an
-admin-close transaction (its single `admin_close` line) and re-emits the
-same `checkout.admin_close` event the live path sends — *not* the
-`transaction.complete` + `item.{action}` pair the regular walk uses. The
-controller projects that event into the same ledger rows the kiosk holds (a
-completed transaction + one `admin_close` line), so a replay drops the
-holder's open row. Both projections are idempotent on
-`source_transaction_id` / `source_line_id`, so re-running a republish stays a
-no-op.
+Two operator tools close the gap:
 
-## Pointers
+- **`POST /api/kiosk/ledger/republish`** walks each completed transaction in
+  an optional `{from, to}` RFC 3339 window. It sends again the events that the
+  live commit path sent:
+  - `transaction.complete` and `item.{action}` for an ordinary transaction.
+  - One `checkout.admin_close` for an admin force-close transaction, the same
+    shape as `commit.AdminClose` sends live.
 
-- Write path: [`internal/commit/commit.go`](../internal/commit/commit.go)
+  It rebuilds the payloads from the stored rows, with the original timestamps
+  and the `kiosk_code` and `location_code` stamped at commit time. You can run
+  it again safely, because the controller's projection is idempotent.
+- **`POST /api/controller/kiosks/{code}/ledger/republish`** does the same
+  thing from the controller, over NATS request and reply. The operator needs
+  no shell access to the kiosk node.
+
+For the opposite case, where a kiosk node's `open_checkouts` has drifted from
+its own ledger, use the integrity rebuild in §4.
+
+::: note No automatic drift detection
+v1 does not detect drift by itself. If you suspect drift, compare the counts
+by hand: `transactions.count` per `kiosk_code` on the controller against the
+count on the kiosk node.
+:::
+
+---
+
+## 9. Stand-alone and Managed: One Ledger Model
+
+A **stand-alone** kiosk node has the full ledger (`transactions`,
+`transaction_lines` and `open_checkouts`) and writes through `commit.Commit`.
+Events fire and go to slog. If NATS is not configured, they stop there.
+Reports read the local ledger.
+
+A **managed** kiosk node has the same ledger, the same commit path and the
+same events. NATS is configured, and the events also reach the controller's
+durable consumer, which projects them. Catalog records come in from the
+controller's KV buckets. The kiosk node's local ledger stays authoritative for
+what happened at that kiosk node. If the controller is unreachable, the kiosk
+node continues to work: checkouts work and events wait in the buffer. The
+controller's projection receives the backlog on reconnect, or through a
+republish if it cannot.
+
+The controller is not a database upgrade for the kiosk node. It is a
+projection target that uses the same row shapes for the ledger. It also has
+its own audit collections for the event families outside the ledger.
+
+You can delete the controller's `pb_data_controller/` and rebuild it with a
+`ledger.republish` on every kiosk node. That gives back the transaction and
+line data, and so the open-checkouts view that the controller derives from it.
+The exception is events older than the JetStream retention window. The next
+manual export pass would have to cover those.
+
+A republish reproduces admin force-closes exactly. It detects an admin-close
+transaction by its single `admin_close` line, and sends the same
+`checkout.admin_close` event as the live path. It does *not* send the
+`transaction.complete` and `item.{action}` pair of the regular walk. The
+controller projects that event into the same ledger rows that the kiosk node
+holds: a completed transaction and one `admin_close` line. So a replay drops
+the holder's open row. Both projections are idempotent on
+`source_transaction_id` and `source_line_id`, so a second republish changes
+nothing.
+
+---
+
+## 10. Where to Go Next
+
+- The write path: [`internal/commit/commit.go`](../internal/commit/commit.go)
 - Admin force-close: [`internal/commit/admin_close.go`](../internal/commit/admin_close.go)
-- Integrity / replay: [`internal/handlers/integrity.go`](../internal/handlers/integrity.go)
+- Integrity check and replay: [`internal/handlers/integrity.go`](../internal/handlers/integrity.go)
 - Republish: [`internal/handlers/ledger_republish.go`](../internal/handlers/ledger_republish.go)
-- Controller aggregator: [`internal/controller/consumer.go`](../internal/controller/consumer.go)
+- The controller's aggregator: [`internal/controller/consumer.go`](../internal/controller/consumer.go)
 - Event subjects: [`internal/events/subjects.go`](../internal/events/subjects.go)
-- Collection shapes: [`migrations/1779000000_init.go`](../migrations/1779000000_init.go) and siblings
+- Collection shapes: [`migrations/1779000000_init.go`](../migrations/1779000000_init.go) and the files beside it
+- The controller that consumes the ledger: [Central Controller](controller.md)

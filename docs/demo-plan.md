@@ -884,6 +884,6 @@ obvious failure mode: `publishResponse` republishing a 2xx body, and
 ## See also
 
 - [RFID](rfid.md) — reader modes, the diff, enclosure partitioning.
-- [Wire reference](wire.md) — command payload and reply shapes.
+- [Wire protocol](protocol.md) — command payload and reply shapes.
 - [Controller](controller.md) — catalogue publishing, membership, the command bus.
 - [Ledger](ledger.md) — why nothing here writes `transactions` by hand.

@@ -86,9 +86,9 @@ branding:
 
 # enabled + virtual are REQUIRED here. require_clock_in_for_checkout and
 # timeclock_only are meaningless on the virtual terminal (no checkout, no
-# badge scan) and ignored. block_clock_out_with_open_checkouts is local-scoped
-# and a no-op here (nothing is checked out locally) — the fleet-wide variant
-# is a planned fast-follow.
+# badge scan) and ignored. block_clock_out_with_open_checkouts checks the
+# worker's fleet-wide open tools in controller-managed mode (fail-open on a
+# stale replica). Standalone it is a no-op, because nothing is checked out here.
 timeclock:
   enabled: true
   virtual: true
