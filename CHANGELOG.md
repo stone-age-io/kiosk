@@ -9,6 +9,10 @@ History before this file is in `git log`.
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-11-22
+
+Release binaries. Nothing else changed since v0.1.0.
+
 ### Added
 
 - **Release binaries.** A `v*` tag now publishes `kiosk-app`,
@@ -82,5 +86,6 @@ and anything else on `kiosk.>` (rule-router rules, NATS permissions) together.
   from the kit; `internal/authfix` is gone. Kiosk's branding and SPA routes
   differ from the other applications' and stay its own.
 
-[Unreleased]: https://github.com/stone-age-io/kiosk/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/stone-age-io/kiosk/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/stone-age-io/kiosk/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/stone-age-io/kiosk/releases/tag/v0.1.0
