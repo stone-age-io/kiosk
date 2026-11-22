@@ -11,7 +11,7 @@ import (
 // isNotFound / isUniqueViolation delegate to internal/dberr — the single home
 // for the SQLite "what does this error mean?" string-matching. Kept as
 // package-local thin wrappers so existing call sites read unchanged.
-func isNotFound(err error) bool       { return dberr.IsNotFound(err) }
+func isNotFound(err error) bool        { return dberr.IsNotFound(err) }
 func isUniqueViolation(err error) bool { return dberr.IsUniqueViolation(err) }
 
 // unmarshalMsg decodes a JetStream message payload into the given target.

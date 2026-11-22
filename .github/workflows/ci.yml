@@ -1,0 +1,78 @@
+# Build hygiene on every push to main and every pull request.
+#
+# The SPA is built here first because the Go build needs it: internal/ui
+# embeds internal/ui/dist, which is gitignored, so `go build` and `go vet`
+# fail with an embed error until `npm run build` has filled it. Unlike
+# access-control, the build output is not committed, so there is no
+# "committed build is stale" check to make.
+#
+# One job with sequential steps, on purpose: the Go steps need the UI build,
+# and parallel jobs would mean shipping it between them as an artifact.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # ---------------------------------------------------------------- frontend
+      - uses: actions/setup-node@v7
+        with:
+          # Pinned rather than lts/*, so a Node release cannot change the build
+          # without a commit saying so.
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: ui
+        run: npm ci
+
+      # vue-tsc, then vite build into ../internal/ui/dist. The UI has no test
+      # suite, so the typecheck here is its only gate.
+      - name: Build the SPA
+        working-directory: ui
+        run: npm run build
+
+      # -------------------------------------------------------------------- go
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Formatting
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then
+            echo "::error::gofmt would rewrite these files:"; echo "$unformatted"
+            exit 1
+          fi
+
+      - name: Module hygiene
+        run: go mod tidy -diff
+
+      # Vetting on Linux alone would never type-check a file built only for
+      # Windows or macOS.
+      - name: Vet every release OS
+        run: |
+          for goos in linux windows darwin; do
+            echo "==> $goos"
+            GOOS=$goos go vet ./...
+          done
+
+      # -count=1 defeats the test cache: a cached PASS is a memory of a result
+      # from a commit that may not be this one.
+      - name: Test
+        run: go test -count=1 ./...
+
+      - name: Build
+        run: go build ./...

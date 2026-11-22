@@ -38,7 +38,7 @@ func punchPayload(punchID string, occurredAt time.Time) EventPayload {
 		UserCode:     "EMP-9",
 		UserName:     "Pat",
 		Direction:    "in",
-		TS:   occurredAt,
+		TS:           occurredAt,
 		Source:       timeclock.SourceSelf,
 	}
 }
